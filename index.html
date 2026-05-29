@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Llamadas — Crédito Preaprobado</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{--bg:#0d0f14;--card:#1a1d26;--card2:#21252f;--border:#2a2f3f;--accent:#f5a800;--text:#f0ead6;--muted:#8a856f;--call:#38b6ff;--green:#2ed573;--warn:#f5a800;--danger:#ff4757;--purple:#a855f7;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:16px;padding-bottom:90px;}
+
+/* HEADER STICKY */
+.top{position:sticky;top:0;z-index:50;background:rgba(13,15,20,.96);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:.9rem 1rem .7rem;}
+.top-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.7rem;}
+.brand{display:flex;align-items:center;gap:.55rem;}
+.brand-icon{width:38px;height:38px;border-radius:11px;background:var(--call);display:grid;place-items:center;font-size:1.2rem;box-shadow:0 0 18px rgba(56,182,255,.4);}
+.brand h1{font-family:'Syne',sans-serif;font-size:1.15rem;line-height:1;}
+.brand p{font-size:.68rem;color:var(--muted);margin-top:.15rem;}
+.guion-btn{background:rgba(56,182,255,.15);border:1px solid rgba(56,182,255,.4);color:var(--call);border-radius:999px;padding:.5rem .9rem;font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap;}
+/* PROGRESS */
+.prog{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:.6rem .85rem;margin-bottom:.7rem;display:none;}
+.prog.show{display:block;}
+.prog-top{display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);margin-bottom:.4rem;}
+.prog-top b{color:var(--call);font-family:'Syne',sans-serif;}
+.prog-bar{height:7px;background:var(--bg);border-radius:999px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--call),var(--green));width:0%;transition:width .4s;}
+/* FILTERS + SEARCH */
+.filters{display:flex;gap:.4rem;align-items:center;}
+.chip{flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:9px;padding:.5rem .3rem;font-size:.8rem;font-weight:600;cursor:pointer;text-align:center;font-family:'DM Sans',sans-serif;}
+.chip.active{background:rgba(56,182,255,.15);border-color:var(--call);color:var(--call);}
+.search{margin-top:.55rem;display:flex;align-items:center;gap:.5rem;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.5rem .8rem;}
+.search input{flex:1;background:none;border:none;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;}
+
+/* CONTAINER */
+.wrap{padding:1rem;}
+
+/* UPLOAD */
+.upload{border:2px dashed var(--border);border-radius:18px;padding:2.2rem 1.2rem;text-align:center;background:var(--card);position:relative;cursor:pointer;}
+.upload input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;}
+.upload .ic{font-size:2.4rem;margin-bottom:.5rem;}
+.upload h3{font-family:'Syne',sans-serif;font-size:1.05rem;margin-bottom:.3rem;}
+.upload p{color:var(--muted);font-size:.82rem;line-height:1.5;}
+
+/* CARD */
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.85rem;transition:opacity .2s;}
+.card.done{opacity:.5;}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;margin-bottom:.2rem;}
+.card-name{font-family:'Syne',sans-serif;font-size:1.15rem;line-height:1.2;flex:1;}
+.card-num{font-size:.72rem;color:var(--call);background:rgba(56,182,255,.12);padding:.2rem .5rem;border-radius:7px;font-weight:700;flex-shrink:0;}
+.card-sub{font-size:.76rem;color:var(--muted);margin-bottom:.85rem;}
+.card-sub b{color:var(--text);font-weight:600;}
+.status-pill{display:inline-block;font-size:.72rem;font-weight:700;padding:.18rem .55rem;border-radius:999px;margin-bottom:.7rem;}
+
+/* CALL BUTTON */
+.call-main{display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;background:var(--call);color:#022;border:none;border-radius:13px;padding:.95rem;font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:800;text-decoration:none;margin-bottom:.55rem;box-shadow:0 4px 16px rgba(56,182,255,.3);}
+.call-main:active{transform:scale(.98);}
+.tel-extra{display:flex;gap:.45rem;flex-wrap:wrap;margin-bottom:.6rem;}
+.tel-chip{flex:1;min-width:120px;display:flex;align-items:center;justify-content:center;gap:.35rem;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.6rem;font-size:.82rem;font-weight:600;text-decoration:none;}
+.wa-chip{display:inline-flex;align-items:center;gap:.3rem;color:var(--green);background:rgba(46,213,115,.12);border:1px solid rgba(46,213,115,.3);border-radius:9px;padding:.5rem .8rem;font-size:.8rem;font-weight:600;text-decoration:none;}
+
+/* RESULT BUTTONS */
+.res-label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:.4rem 0 .45rem;}
+.res-grid{display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-bottom:.55rem;}
+.res-btn{display:flex;align-items:center;justify-content:center;gap:.3rem;background:var(--card2);border:1.5px solid var(--border);color:var(--text);border-radius:10px;padding:.65rem .4rem;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.res-btn.sel-interesado{background:rgba(46,213,115,.18);border-color:var(--green);color:var(--green);}
+.res-btn.sel-volver_llamar{background:rgba(168,85,247,.18);border-color:var(--purple);color:var(--purple);}
+.res-btn.sel-no_atendio{background:rgba(245,168,0,.15);border-color:var(--warn);color:var(--warn);}
+.res-btn.sel-no_interesa{background:rgba(255,71,87,.12);border-color:var(--danger);color:#ff8c94;}
+.note{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:.6rem .75rem;color:var(--text);font-size:.85rem;outline:none;font-family:'DM Sans',sans-serif;}
+.note:focus{border-color:var(--call);}
+
+.empty{text-align:center;padding:3rem 1rem;color:var(--muted);}
+.empty .ic{font-size:2.6rem;opacity:.5;margin-bottom:.8rem;}
+
+/* FOOTER ACTIONS */
+.footbar{position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(13,15,20,.97);backdrop-filter:blur(10px);border-top:1px solid var(--border);padding:.7rem 1rem;display:none;gap:.5rem;}
+.footbar.show{display:flex;}
+.foot-btn{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:11px;padding:.7rem;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.foot-btn.green{background:rgba(46,213,115,.15);border-color:rgba(46,213,115,.4);color:var(--green);}
+.foot-btn.danger{background:rgba(255,71,87,.12);border-color:rgba(255,71,87,.3);color:var(--danger);flex:0 0 auto;width:52px;}
+
+/* MODAL GUION */
+.sheet-ov{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:flex-end;}
+.sheet-ov.show{display:flex;}
+.sheet{background:var(--card);border-top:3px solid var(--call);border-radius:22px 22px 0 0;padding:1.3rem 1.1rem 1.6rem;width:100%;max-height:88vh;overflow-y:auto;animation:slideUp .25s ease;}
+@keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+.sheet-grab{width:42px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 1rem;}
+.sheet h3{font-family:'Syne',sans-serif;font-size:1.05rem;color:var(--call);margin-bottom:.3rem;}
+.sheet .sub{font-size:.76rem;color:var(--muted);margin-bottom:.9rem;}
+.sheet textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:.85rem;color:var(--text);font-size:.92rem;line-height:1.55;font-family:'DM Sans',sans-serif;min-height:300px;outline:none;resize:vertical;}
+.sheet-close{width:100%;background:var(--call);color:#022;border:none;border-radius:12px;padding:.85rem;font-weight:800;font-family:'Syne',sans-serif;font-size:1rem;margin-top:.9rem;cursor:pointer;}
+
+/* TOAST */
+.toast{position:fixed;bottom:90px;left:1rem;right:1rem;background:var(--card2);border:1px solid var(--call);color:var(--text);padding:.8rem 1rem;border-radius:12px;font-size:.86rem;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5);transform:translateY(140px);opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);z-index:200;}
+.toast.show{transform:translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-row">
+    <div class="brand">
+      <div class="brand-icon">📞</div>
+      <div><h1>Llamadas</h1><p>Crédito preaprobado $500.000</p></div>
+    </div>
+    <button class="guion-btn" onclick="abrirGuion()">📖 Guion</button>
+  </div>
+  <div class="prog" id="prog">
+    <div class="prog-top"><span>Progreso de llamadas</span><span><b id="progDone">0</b> / <span id="progTotal">0</span></span></div>
+    <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+  </div>
+  <div class="filters" id="filters" style="display:none;">
+    <button class="chip active" id="chipPend" onclick="setFilter('pendiente')">Pendientes</button>
+    <button class="chip" id="chipDone" onclick="setFilter('llamados')">Llamados</button>
+    <button class="chip" id="chipAll" onclick="setFilter('todos')">Todos</button>
+  </div>
+  <div class="search" id="searchWrap" style="display:none;">
+    🔍 <input type="text" id="search" placeholder="Buscar por nombre o teléfono..." oninput="render()">
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="upload" id="upload">
+    <input type="file" accept=".xlsx,.xls,.csv" id="file">
+    <div class="ic">📂</div>
+    <h3>Cargá tu Excel de clientes</h3>
+    <p>Tocá acá y elegí <b>Clientes GN.xlsx</b><br>Te detecta el nombre y los teléfonos solo</p>
+  </div>
+  <div id="list"></div>
+</div>
+
+<div class="footbar" id="footbar">
+  <button class="foot-btn" onclick="agendarTodos()" style="background:rgba(56,182,255,.12);border-color:rgba(56,182,255,.35);color:var(--call);">📇 Agendar todos</button>
+  <button class="foot-btn green" onclick="exportar()">📊 Excel</button>
+  <button class="foot-btn" onclick="cargarOtro()">📂 Otro</button>
+  <button class="foot-btn danger" onclick="limpiar()">🗑</button>
+</div>
+
+<!-- MODAL GUION -->
+<div class="sheet-ov" id="guionOv" onclick="if(event.target===this)cerrarGuion()">
+  <div class="sheet">
+    <div class="sheet-grab"></div>
+    <h3 id="guionTitle">📖 Guion de la llamada</h3>
+    <p class="sub">Leélo mientras llamás. Lo podés editar y se guarda solo.</p>
+    <textarea id="guion"></textarea>
+    <button class="sheet-close" onclick="cerrarGuion()">Listo ✓</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── ESTADO ────────────────────────────────────────────────
+let clients = [];
+let filter = 'pendiente';
+
+const GUION_DEFAULT = `Hola, ¿hablo con {nombre}? ¿Cómo andás? Te hablo de Mega Sports, ¿tenés un minutito?
+
+Te llamo con una buena noticia 🎉: tenés un crédito PREAPROBADO de $500.000 listo para usar en cualquiera de nuestras sucursales. Es un beneficio exclusivo por ser cliente.
+
+Lo podés usar para lo que necesites — zapatillas, indumentaria, equipamiento deportivo — en cuotas y sin trámites, porque ya estás preaprobado/a.
+
+¿Querés que te lo dejemos activo para que pases cuando quieras? ¿Hay algo que estés buscando que te pueda ir reservando?
+
+────────────────
+SI DICE QUE SÍ → "¡Genial! Te espero en la sucursal, llevá tu DNI nomás."
+SI LO VA A PENSAR → "Dale, te lo dejo activo igual. Te paso los datos por WhatsApp así los tenés. 👍"
+SI DICE QUE NO → "Ningún problema, igual te queda disponible por si cambiás de idea. ¡Gracias!"
+────────────────
+✅ Acordate de cargar el resultado en ARBI.`;
+
+const ESTADOS = {
+  pendiente:    {lbl:'⏳ Pendiente',        clr:'var(--muted)',  bg:'transparent'},
+  llamado:      {lbl:'📞 Llamado',          clr:'var(--call)',   bg:'rgba(56,182,255,.15)'},
+  interesado:   {lbl:'🎉 Interesado / Renovó',clr:'var(--green)', bg:'rgba(46,213,115,.18)'},
+  volver_llamar:{lbl:'🔁 Volver a llamar',  clr:'var(--purple)', bg:'rgba(168,85,247,.18)'},
+  no_atendio:   {lbl:'📴 No atendió',       clr:'var(--warn)',   bg:'rgba(245,168,0,.15)'},
+  no_interesa:  {lbl:'🙅 No le interesa',   clr:'#ff8c94',       bg:'rgba(255,71,87,.12)'},
+  numero_malo:  {lbl:'🚫 Número malo',      clr:'var(--danger)', bg:'rgba(255,71,87,.1)'}
+};
+
+// ── TELÉFONOS ─────────────────────────────────────────────
+function limpiarTel(val){
+  if(!val) return '';
+  let s = String(val).replace(/familiar|particular|cel\b|tel\b|fax|whatsapp\b|\bwa\b|movil|mobile/gi,' ');
+  let d = s.replace(/[^\d]/g,'');
+  if(!d || d.length < 6) return '';
+  if      (d.startsWith('00549')) d = d.slice(5);
+  else if (d.startsWith('0054'))  d = d.slice(4);
+  else if (d.startsWith('549') && d.length>=12) d = d.slice(3);
+  else if (d.startsWith('54')  && d.length>=11) d = d.slice(2);
+  if(d.startsWith('0')) d = d.slice(1);
+  if(d.length>=11){
+    if      (d.slice(2,4)==='15') d = d.slice(0,2)+d.slice(4);
+    else if (d.slice(3,5)==='15') d = d.slice(0,3)+d.slice(5);
+    else if (d.slice(4,6)==='15') d = d.slice(0,4)+d.slice(6);
+  }
+  if(d.length>10) d = d.slice(-10);
+  if(d.length<8) return '';
+  return d;
+}
+function telLink(num){ return 'tel:'+num.replace(/\D/g,''); }
+function waLink(num){
+  let d = num.replace(/\D/g,'');
+  if(d.startsWith('549') && d.length>=12) d=d.slice(3);
+  else if(d.startsWith('54') && d.length>=11) d=d.slice(2);
+  if(d.startsWith('0')) d=d.slice(1);
+  return 'https://wa.me/549'+d;
+}
+
+// ── PERSISTENCIA ──────────────────────────────────────────
+function guardar(){
+  try{
+    localStorage.setItem('llamadas_data', JSON.stringify(clients));
+    localStorage.setItem('llamadas_guion', document.getElementById('guion').value);
+  }catch(e){}
+}
+function cargar(){
+  try{
+    const d = localStorage.getItem('llamadas_data'); if(d) clients = JSON.parse(d);
+    const g = localStorage.getItem('llamadas_guion');
+    document.getElementById('guion').value = g || GUION_DEFAULT;
+  }catch(e){ document.getElementById('guion').value = GUION_DEFAULT; }
+}
+
+// ── LEER EXCEL ────────────────────────────────────────────
+document.getElementById('file').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ev=>{
+    try{
+      const wb = XLSX.read(ev.target.result, {type:'binary', cellDates:true});
+      let rows = [];
+      wb.SheetNames.forEach(sn=>{
+        rows = rows.concat(XLSX.utils.sheet_to_json(wb.Sheets[sn], {defval:''}));
+      });
+      procesar(rows);
+    }catch(err){ toast('❌ No pude leer el archivo'); console.error(err); }
+    e.target.value='';
+  };
+  r.readAsBinaryString(f);
+});
+
+function procesar(raw){
+  if(!raw.length){ toast('⚠️ El Excel está vacío'); return; }
+  const norm = s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[_\s\.]/g,'');
+  const find = (keys,terms)=>{
+    const e = keys.find(k=>terms.some(t=>norm(k)===norm(t))); if(e) return e;
+    return keys.find(k=>terms.some(t=>norm(k).includes(norm(t)))) || '';
+  };
+  const nuevos = raw.map((row,i)=>{
+    const keys = Object.keys(row);
+    const f = t=>find(keys,t);
+    const nk = f(['nombrecompleto','nombre','name','cliente','apellidoynombre','razonsocial']);
+    const dk = f(['dni','doc','cedula','documento']);
+    const ck = f(['codcomercio','comercio','sucursal','agencia']);
+    const p1 = f(['tel1','telefono1','celular1','telefono','tel','phone','celular','movil','whatsapp','contacto']);
+    const tel1 = limpiarTel(row[p1]);
+    return {
+      id: i,
+      nombre: String(row[nk] || `Cliente ${i+1}`).trim(),
+      dni: String(row[dk]||'').replace(/\D/g,''),
+      comercio: String(row[ck]||'').trim(),
+      tels: tel1 ? [tel1] : [],
+      estado: 'pendiente',
+      nota: ''
+    };
+  });
+  clients = nuevos;
+  guardar();
+  toast(`✅ ${clients.length} clientes cargados`);
+  iniciar();
+}
+
+// ── RENDER ────────────────────────────────────────────────
+function setFilter(f){
+  filter = f;
+  document.getElementById('chipPend').classList.toggle('active', f==='pendiente');
+  document.getElementById('chipDone').classList.toggle('active', f==='llamados');
+  document.getElementById('chipAll').classList.toggle('active', f==='todos');
+  render();
+}
+
+function visibles(){
+  const q = (document.getElementById('search').value||'').toLowerCase();
+  return clients.filter(c=>{
+    if(filter==='pendiente' && c.estado!=='pendiente' && c.estado!=='llamado') return false;
+    if(filter==='llamados' && (c.estado==='pendiente')) return false;
+    if(q){
+      const hay = (c.nombre+' '+c.dni+' '+c.tels.join(' ')+' '+c.comercio).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  const list = document.getElementById('list');
+  if(!clients.length){
+    list.innerHTML = '';
+    return;
+  }
+  const data = visibles();
+  if(!data.length){
+    list.innerHTML = '<div class="empty"><div class="ic">📭</div><p>No hay clientes en este filtro</p></div>';
+    actualizarProgreso();
+    return;
+  }
+  let html = '';
+  data.forEach((c, idx)=>{
+    const num = data.indexOf(c)+1;
+    const est = ESTADOS[c.estado] || ESTADOS.pendiente;
+    const done = (c.estado!=='pendiente' && c.estado!=='llamado');
+    const tel1 = c.tels[0] || '';
+
+    const resBtn = (val, txt)=>`<button class="res-btn ${c.estado===val?'sel-'+val:''}" onclick="setEstado(${c.id},'${val}')">${txt}</button>`;
+
+    html += `<div class="card ${done?'done':''}">
+      <div class="card-head">
+        <div class="card-name">${c.nombre}</div>
+        <span class="card-num">#${num}</span>
+      </div>
+      <div class="card-sub">${c.dni?`DNI <b>${c.dni}</b>`:''}${c.dni&&c.comercio?' · ':''}${c.comercio?`<b>${c.comercio}</b>`:''}</div>
+      ${c.estado!=='pendiente'?`<span class="status-pill" style="color:${est.clr};background:${est.bg};">${est.lbl}</span><br>`:''}
+      ${tel1
+        ? `<a href="${telLink(tel1)}" class="call-main" onclick="marcarLlamado(${c.id})">📞 Llamar — ${tel1}</a>
+           <div class="tel-extra">
+             <button class="tel-chip" onclick="agendarUno(${c.id})">➕ Agendar</button>
+             <a href="${waLink(tel1)}" target="_blank" class="wa-chip">💬 WhatsApp</a>
+           </div>`
+        : `<div style="color:var(--danger);font-size:.85rem;margin-bottom:.6rem;">⚠️ Sin teléfono en el Excel</div>`}
+      <div class="res-label">Resultado de la llamada</div>
+      <div class="res-grid">
+        ${resBtn('interesado','🎉 Interesado')}
+        ${resBtn('volver_llamar','🔁 Volver a llamar')}
+        ${resBtn('no_atendio','📴 No atendió')}
+        ${resBtn('no_interesa','🙅 No le interesa')}
+      </div>
+      <input class="note" type="text" placeholder="✏️ Nota (ej: pasa el sábado)..." value="${(c.nota||'').replace(/"/g,'&quot;')}" onchange="setNota(${c.id}, this.value)">
+    </div>`;
+  });
+  list.innerHTML = html;
+  actualizarProgreso();
+}
+
+function actualizarProgreso(){
+  const total = clients.length;
+  const hechos = clients.filter(c=>c.estado!=='pendiente' && c.estado!=='llamado').length;
+  document.getElementById('progDone').textContent = hechos;
+  document.getElementById('progTotal').textContent = total;
+  document.getElementById('progFill').style.width = total?Math.round(hechos/total*100)+'%':'0%';
+}
+
+// ── ACCIONES ──────────────────────────────────────────────
+function marcarLlamado(id){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  if(c.estado==='pendiente'){ c.estado='llamado'; guardar(); }
+  // no re-render inmediato para no cortar la apertura del teléfono
+}
+function setEstado(id, val){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  c.estado = (c.estado===val) ? 'llamado' : val;
+  guardar(); render();
+  if(c.estado===val && val!=='llamado') toast(ESTADOS[val].lbl);
+}
+function setNota(id, val){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  c.nota = val; guardar();
+}
+
+// ── GUION ─────────────────────────────────────────────────
+let guionNombre = '';
+function abrirGuion(nombre){
+  guionNombre = nombre || '';
+  const ta = document.getElementById('guion');
+  document.getElementById('guionTitle').textContent = guionNombre ? `📖 Guion — ${guionNombre}` : '📖 Guion de la llamada';
+  document.getElementById('guionOv').classList.add('show');
+}
+function cerrarGuion(){
+  guardar();
+  document.getElementById('guionOv').classList.remove('show');
+}
+
+// ── AGENDAR (guardar contacto en el celular) ──────────────
+function telInternacional(num){
+  let d = num.replace(/\D/g,'');
+  if(d.startsWith('549') && d.length>=12) d=d.slice(3);
+  else if(d.startsWith('54') && d.length>=11) d=d.slice(2);
+  if(d.startsWith('0')) d=d.slice(1);
+  return '+549'+d;
+}
+function vcardDe(c){
+  const tel = c.tels[0]||'';
+  const v = ['BEGIN:VCARD','VERSION:3.0',`FN:${c.nombre}`,'ORG:Mega Sports'];
+  if(tel) v.push(`TEL;TYPE=CELL:${telInternacional(tel)}`);
+  const nota = ['Crédito preaprobado $500.000', c.dni?`DNI ${c.dni}`:'', c.comercio?`Comercio ${c.comercio}`:''].filter(Boolean).join(' · ');
+  v.push(`NOTE:${nota}`);
+  v.push('END:VCARD');
+  return v.join('\r\n');
+}
+function descargarVCF(texto, nombreArchivo){
+  const blob = new Blob([texto], {type:'text/vcard;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombreArchivo;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+}
+function agendarUno(id){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  if(!c.tels[0]){ toast('⚠️ Sin teléfono para agendar'); return; }
+  const safe = c.nombre.replace(/[^\w\s-]/g,'').trim().replace(/\s+/g,'_') || 'contacto';
+  descargarVCF(vcardDe(c), `${safe}.vcf`);
+  toast('➕ Abrí el archivo para guardarlo en Contactos');
+}
+function agendarTodos(){
+  const conTel = clients.filter(c=>c.tels[0]);
+  if(!conTel.length){ toast('⚠️ No hay clientes con teléfono'); return; }
+  if(!confirm(`Agendar ${conTel.length} contactos en el celular?\n\nSe descarga un archivo — abrilo y elegí "Importar / Agregar a contactos".`)) return;
+  const texto = conTel.map(vcardDe).join('\r\n');
+  descargarVCF(texto, `clientes_megasports_${new Date().toISOString().slice(0,10)}.vcf`);
+  toast(`📇 ${conTel.length} contactos · abrí el archivo para agendarlos`);
+}
+
+
+function exportar(){
+  if(!clients.length){ toast('⚠️ No hay datos'); return; }
+  const rows = clients.map((c,i)=>({
+    '#': i+1,
+    'Nombre': c.nombre,
+    'DNI': c.dni,
+    'Comercio': c.comercio,
+    'Teléfono': c.tels[0]||'',
+    'Resultado': (ESTADOS[c.estado]||ESTADOS.pendiente).lbl,
+    'Nota': c.nota||''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:22},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Llamadas');
+  XLSX.writeFile(wb, `llamadas_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast(`📊 ${rows.length} resultados exportados`);
+}
+function cargarOtro(){ document.getElementById('file').click(); }
+function limpiar(){
+  if(!confirm('¿Borrar toda la lista? (el guion se mantiene)')) return;
+  clients = []; guardar();
+  document.getElementById('upload').style.display='block';
+  document.getElementById('footbar').classList.remove('show');
+  document.getElementById('filters').style.display='none';
+  document.getElementById('searchWrap').style.display='none';
+  document.getElementById('prog').classList.remove('show');
+  render();
+  toast('🗑 Lista borrada');
+}
+
+// ── UI ────────────────────────────────────────────────────
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function iniciar(){
+  if(clients.length){
+    document.getElementById('upload').style.display='none';
+    document.getElementById('footbar').classList.add('show');
+    document.getElementById('filters').style.display='flex';
+    document.getElementById('searchWrap').style.display='flex';
+    document.getElementById('prog').classList.add('show');
+  }
+  render();
+}
+
+// ── INIT ──────────────────────────────────────────────────
+cargar();
+if(clients.length){ iniciar(); toast(`💾 ${clients.length} clientes guardados`); }
+</script>
+</body>
+</html>
