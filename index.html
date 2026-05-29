@@ -48,7 +48,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .card.done{opacity:.5;}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;margin-bottom:.2rem;}
 .card-name{font-family:'Syne',sans-serif;font-size:1.15rem;line-height:1.2;flex:1;}
-.card-num{font-size:.72rem;color:var(--call);background:rgba(56,182,255,.12);padding:.2rem .5rem;border-radius:7px;font-weight:700;flex-shrink:0;}
+.card-num{font-size:.78rem;color:#022;background:var(--call);padding:.22rem .6rem;border-radius:8px;font-weight:800;flex-shrink:0;font-family:'Syne',sans-serif;}
 .card-sub{font-size:.76rem;color:var(--muted);margin-bottom:.85rem;}
 .card-sub b{color:var(--text);font-weight:600;}
 .status-pill{display:inline-block;font-size:.72rem;font-weight:700;padding:.18rem .55rem;border-radius:999px;margin-bottom:.7rem;}
@@ -120,6 +120,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div><h1>Llamadas</h1><p>Crédito preaprobado $500.000</p></div>
     </div>
     <button class="guion-btn" onclick="abrirGuion()">📖 Guion</button>
+    <button class="guion-btn" onclick="cargarOtro()" style="background:rgba(245,168,0,.12);border-color:rgba(245,168,0,.4);color:var(--warn);">📂 Excel</button>
   </div>
   <div class="prog" id="prog">
     <div class="prog-top"><span>Progreso de llamadas</span><span><b id="progDone">0</b> / <span id="progTotal">0</span></span></div>
@@ -315,6 +316,7 @@ function procesar(raw){
       estado: 'pendiente',
       resLlamada: '',
       resWa: '',
+      tocado: false,
       nota: ''
     };
   });
@@ -336,9 +338,8 @@ function setFilter(f){
 function visibles(){
   const q = (document.getElementById('search').value||'').toLowerCase();
   return clients.filter(c=>{
-    const tieneres = c.resLlamada || c.resWa;
-    if(filter==='pendiente' && tieneres) return false;
-    if(filter==='llamados'  && !tieneres) return false;
+    if(filter==='pendiente' && c.tocado) return false;
+    if(filter==='llamados'  && !c.tocado) return false;
     if(q){
       const hay = (c.nombre+' '+c.dni+' '+c.tels.join(' ')+' '+c.comercio).toLowerCase();
       if(!hay.includes(q)) return false;
@@ -367,7 +368,8 @@ function render(){
       onclick="setRes(${id},'${campo}','${val}')">${txt}</button>`;
 
   let html = '';
-  data.forEach(c=>{
+  data.forEach((c, idx)=>{
+    const num = idx + 1;
     const tel1 = c.tels[0]||'';
     const done = !!(c.resLlamada||c.resWa);
 
@@ -379,9 +381,10 @@ function render(){
     html += `<div class="card ${done?'done':''}" id="card-${c.id}">
       <div class="card-head">
         <div class="card-name">${c.nombre}</div>
+        <span class="card-num">#${num}</span>
       </div>
       <div class="card-sub">${c.dni?`DNI <b>${c.dni}</b>`:''}${c.dni&&c.comercio?' · ':''}${c.comercio?`<b>${c.comercio}</b>`:''}</div>
-      ${pills.length?`<div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem;">${pills.join('')}</div>`:''}
+      ${pills.length?`<div class="pill-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem;">${pills.join('')}</div>`:''}
 
       ${tel1 ? `
         <a href="${telLink(tel1)}" class="call-main" onclick="abrirSec(${c.id},'llamada')">📞 Llamar — ${tel1}</a>
@@ -426,7 +429,7 @@ function render(){
 
 function actualizarProgreso(){
   const total = clients.length;
-  const hechos = clients.filter(c=>c.resLlamada||c.resWa).length;
+  const hechos = clients.filter(c=>c.tocado).length;
   document.getElementById('progDone').textContent = hechos;
   document.getElementById('progTotal').textContent = total;
   document.getElementById('progFill').style.width = total?Math.round(hechos/total*100)+'%':'0%';
@@ -434,55 +437,73 @@ function actualizarProgreso(){
 
 // ── ACCIONES ──────────────────────────────────────────────
 
-// Abre la sección correcta al tocar Llamar o WA (sin re-render)
+// Abre la sección correcta al tocar Llamar o WA
 function abrirSec(id, tipo){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+
+  // marcar como tocado y guardar
+  if(!c.tocado){ c.tocado = true; guardar(); actualizarProgreso(); }
+
   const secLlamada = document.getElementById(`sec-llamada-${id}`);
   const secWa      = document.getElementById(`sec-wa-${id}`);
-  if(!secLlamada || !secWa) return;
-  if(tipo==='llamada'){
-    secLlamada.style.display = 'block';
-    // scroll suave a la sección
-    setTimeout(()=>secLlamada.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
-  } else {
-    secWa.style.display = 'block';
-    setTimeout(()=>secWa.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
+  if(tipo==='llamada' && secLlamada) secLlamada.style.display='block';
+  if(tipo==='wa'      && secWa)      secWa.style.display='block';
+
+  // si estamos en Pendientes → animar salida después de 900ms
+  // (tiempo para que el usuario vea la sección y toque un resultado)
+  if(filter==='pendiente'){
+    const card = document.getElementById(`card-${id}`);
+    if(card){
+      setTimeout(()=>{
+        card.style.transition='opacity .4s,transform .4s';
+        card.style.opacity='0'; card.style.transform='translateX(70px)';
+        setTimeout(()=>render(), 420);
+      }, 900);
+    }
   }
 }
 
 // Guarda resultado (llamada o WA) y actualiza pill sin re-render total
 function setRes(id, campo, val){
   const c = clients.find(x=>x.id===id); if(!c) return;
-  // toggle: si ya estaba seleccionado, deselecciona
   c[campo] = (c[campo]===val) ? '' : val;
   guardar();
   actualizarProgreso();
-  // actualizar solo los botones de esa sección sin re-renderizar todo
+
+  // Si ya está tocado y estamos en pendientes → ya lo maneja abrirSec, no hacer nada extra
+  // Si estamos en "llamados" y desmarca todo → actualizar pills sin mover
+  if(filter==='pendiente' && c.tocado){
+    // ya salió por abrirSec, solo actualizar contadores
+    return;
+  }
+
+  // Si sigue visible → actualizar solo los botones y pills sin re-render
   const sec = campo==='resLlamada'
     ? document.getElementById(`sec-llamada-${id}`)
     : document.getElementById(`sec-wa-${id}`);
   if(sec){
     sec.querySelectorAll('.res-btn').forEach(btn=>{
-      const v = btn.getAttribute('onclick').match(/'([^']+)'\)$/)?.[1];
+      const m = btn.getAttribute('onclick').match(/'([^']+)'\)$/);
+      const v = m?m[1]:'';
       btn.className = 'res-btn' + (c[campo]===v ? ' sel sel-'+v : '');
     });
   }
-  // actualizar pills de estado arriba
-  const card = document.getElementById(`card-${id}`);
+  const card = document.getElementById(`card-${c.id}`);
   if(card){
-    const rLbl={interesado:'🎉 Interesado',volver_llamar:'🔁 Volver a llamar',
+    const rLbl2={interesado:'🎉 Interesado',volver_llamar:'🔁 Volver a llamar',
       no_atendio:'📴 No atendió',no_interesa:'🙅 No le interesa',numero_malo:'🚫 Nro malo',
       enviado:'✅ Enviado',contesto:'💬 Contestó',no_contesta:'📵 No contesta'};
     const pills=[];
-    if(c.resLlamada) pills.push(`<span style="font-size:.72rem;font-weight:700;color:var(--call);background:rgba(56,182,255,.12);padding:.15rem .5rem;border-radius:7px;">📞 ${rLbl[c.resLlamada]||c.resLlamada}</span>`);
-    if(c.resWa)      pills.push(`<span style="font-size:.72rem;font-weight:700;color:var(--green);background:rgba(46,213,115,.1);padding:.15rem .5rem;border-radius:7px;">💬 ${rLbl[c.resWa]||c.resWa}</span>`);
+    if(c.resLlamada) pills.push(`<span style="font-size:.72rem;font-weight:700;color:var(--call);background:rgba(56,182,255,.12);padding:.15rem .5rem;border-radius:7px;">📞 ${rLbl2[c.resLlamada]||c.resLlamada}</span>`);
+    if(c.resWa)      pills.push(`<span style="font-size:.72rem;font-weight:700;color:var(--green);background:rgba(46,213,115,.1);padding:.15rem .5rem;border-radius:7px;">💬 ${rLbl2[c.resWa]||c.resWa}</span>`);
     let pillDiv = card.querySelector('.pill-row');
-    if(!pillDiv){
+    if(!pillDiv && pills.length){
       pillDiv = document.createElement('div');
       pillDiv.className='pill-row';
       pillDiv.style.cssText='display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem;';
       card.querySelector('.card-sub').after(pillDiv);
     }
-    pillDiv.innerHTML = pills.join('');
+    if(pillDiv) pillDiv.innerHTML = pills.join('');
     card.classList.toggle('done', !!(c.resLlamada||c.resWa));
   }
 }
@@ -578,7 +599,9 @@ function exportar(){
   XLSX.writeFile(wb, `llamadas_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast(`📊 ${rows.length} resultados exportados`);
 }
-function cargarOtro(){ document.getElementById('file').click(); }
+function cargarOtro(){
+  document.getElementById('file').click();
+}
 function limpiar(){
   if(!confirm('¿Borrar toda la lista? (el guion y el mensaje WA se mantienen)')) return;
   clients = []; guardar();
@@ -598,13 +621,12 @@ function toast(msg){
   setTimeout(()=>t.classList.remove('show'), 2600);
 }
 function iniciar(){
-  if(clients.length){
-    document.getElementById('upload').style.display='none';
-    document.getElementById('footbar').classList.add('show');
-    document.getElementById('filters').style.display='flex';
-    document.getElementById('searchWrap').style.display='flex';
-    document.getElementById('prog').classList.add('show');
-  }
+  // Upload se oculta pero queda accesible por el botón "📂 Cargar otro" del footer
+  document.getElementById('upload').style.display = 'none';
+  document.getElementById('footbar').classList.add('show');
+  document.getElementById('filters').style.display = 'flex';
+  document.getElementById('searchWrap').style.display = 'flex';
+  document.getElementById('prog').classList.add('show');
   render();
 }
 
