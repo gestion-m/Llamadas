@@ -447,33 +447,43 @@ function actualizarProgreso(){
 function abrirSec(id, tipo){
   const c = clients.find(x=>x.id===id); if(!c) return;
 
-  // marcar como tocado y guardar (esto lo manda a "Llamados", pero NO lo saca de la vista actual hasta que cambie de pestaña)
-  if(!c.tocado){ c.tocado = true; guardar(); actualizarProgreso(); }
-
   const secLlamada = document.getElementById(`sec-llamada-${id}`);
   const secWa      = document.getElementById(`sec-wa-${id}`);
   const target = (tipo==='llamada') ? secLlamada : secWa;
   if(target){
-    target.style.display='block';
+    target.style.display = 'block';
     target.classList.add('flash');
-    setTimeout(()=>{ target.scrollIntoView({behavior:'smooth',block:'center'}); }, 200);
+    setTimeout(()=>{ target.scrollIntoView({behavior:'smooth', block:'center'}); }, 200);
     setTimeout(()=>target.classList.remove('flash'), 1900);
   }
 
-  // marca visual de que ya fue tocado, sin quitarlo
+  // marca visual sin mover la tarjeta — la mueve setRes cuando el usuario toca un botón
   const card = document.getElementById(`card-${id}`);
   if(card) card.classList.add('tocado');
 }
 
-// Guarda resultado (llamada o WA) y actualiza in situ, SIN sacar la tarjeta
+// Guarda resultado (llamada o WA) — si estamos en Pendientes saca la tarjeta al instante
 function setRes(id, campo, val){
   const c = clients.find(x=>x.id===id); if(!c) return;
+  // toggle: si ya era ese valor, lo limpia
   c[campo] = (c[campo]===val) ? '' : val;
-  c.tocado = true;
+  c.tocado = !!(c.resLlamada || c.resWa);
   guardar();
   actualizarProgreso();
 
-  // actualizar botones de esa sección
+  // Si estamos en Pendientes y tiene al menos un resultado → animar salida
+  if(filter==='pendiente' && (c.resLlamada || c.resWa)){
+    const card = document.getElementById(`card-${id}`);
+    if(card){
+      card.style.transition = 'opacity .35s, transform .35s';
+      card.style.opacity = '0';
+      card.style.transform = 'translateX(70px)';
+      setTimeout(()=>render(), 380);
+    } else { render(); }
+    return;
+  }
+
+  // Si sigue visible → actualizar botones y pills sin re-render
   const sec = campo==='resLlamada'
     ? document.getElementById(`sec-llamada-${id}`)
     : document.getElementById(`sec-wa-${id}`);
@@ -484,7 +494,6 @@ function setRes(id, campo, val){
       btn.className = 'res-btn' + (c[campo]===v ? ' sel sel-'+v : '');
     });
   }
-  // actualizar pills arriba
   const card = document.getElementById(`card-${id}`);
   if(card){
     const rLbl2={interesado:'🎉 Interesado',volver_llamar:'🔁 Volver a llamar',
@@ -501,7 +510,7 @@ function setRes(id, campo, val){
       card.querySelector('.card-sub').after(pillDiv);
     }
     if(pillDiv) pillDiv.innerHTML = pills.join('');
-    card.classList.add('done');
+    card.classList.toggle('done', !!(c.resLlamada||c.resWa));
   }
 }
 
