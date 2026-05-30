@@ -45,7 +45,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 /* CARD */
 .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.85rem;transition:opacity .2s;}
-.card.done{opacity:.5;}
+.card.done{border-color:rgba(46,213,115,.35);}
+.card.tocado{border-color:rgba(56,182,255,.45);}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;margin-bottom:.2rem;}
 .card-name{font-family:'Syne',sans-serif;font-size:1.15rem;line-height:1.2;flex:1;}
 .card-num{font-size:.78rem;color:#022;background:var(--call);padding:.22rem .6rem;border-radius:8px;font-weight:800;flex-shrink:0;font-family:'Syne',sans-serif;}
@@ -64,6 +65,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .sec-result{border-radius:12px;padding:.75rem;margin-bottom:.5rem;border:1.5px solid var(--border);}
 .sec-result.llamada{border-color:rgba(56,182,255,.3);background:rgba(56,182,255,.05);}
 .sec-result.wa{border-color:rgba(46,213,115,.3);background:rgba(46,213,115,.05);}
+@keyframes flashSec{0%{box-shadow:0 0 0 0 rgba(245,168,0,.6);}100%{box-shadow:0 0 0 8px rgba(245,168,0,0);}}
+.sec-result.flash{animation:flashSec .9s ease-out 2;}
 .sec-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.55rem;}
 .sec-result.llamada .sec-title{color:var(--call);}
 .sec-result.wa .sec-title{color:var(--green);}
@@ -264,6 +267,8 @@ function guardar(){
 function cargar(){
   try{
     const d = localStorage.getItem('llamadas_data'); if(d) clients = JSON.parse(d);
+    // respaldo: si hay clientes viejos sin número, se lo asigna por orden
+    clients.forEach((c,i)=>{ if(!c.n) c.n = i+1; if(c.tocado===undefined) c.tocado=false; });
     const g = localStorage.getItem('llamadas_guion');
     document.getElementById('guion').value = g || GUION_DEFAULT;
     const w = localStorage.getItem('llamadas_wa');
@@ -309,6 +314,7 @@ function procesar(raw){
     const tel1 = limpiarTel(row[p1]);
     return {
       id: i,
+      n: i+1,
       nombre: String(row[nk] || `Cliente ${i+1}`).trim(),
       dni: String(row[dk]||'').replace(/\D/g,''),
       comercio: String(row[ck]||'').trim(),
@@ -369,7 +375,7 @@ function render(){
 
   let html = '';
   data.forEach((c, idx)=>{
-    const num = idx + 1;
+    const num = c.n || (idx + 1);
     const tel1 = c.tels[0]||'';
     const done = !!(c.resLlamada||c.resWa);
 
@@ -437,47 +443,37 @@ function actualizarProgreso(){
 
 // ── ACCIONES ──────────────────────────────────────────────
 
-// Abre la sección correcta al tocar Llamar o WA
+// Abre la sección correcta al tocar Llamar o WA (NO saca la tarjeta sola)
 function abrirSec(id, tipo){
   const c = clients.find(x=>x.id===id); if(!c) return;
 
-  // marcar como tocado y guardar
+  // marcar como tocado y guardar (esto lo manda a "Llamados", pero NO lo saca de la vista actual hasta que cambie de pestaña)
   if(!c.tocado){ c.tocado = true; guardar(); actualizarProgreso(); }
 
   const secLlamada = document.getElementById(`sec-llamada-${id}`);
   const secWa      = document.getElementById(`sec-wa-${id}`);
-  if(tipo==='llamada' && secLlamada) secLlamada.style.display='block';
-  if(tipo==='wa'      && secWa)      secWa.style.display='block';
-
-  // si estamos en Pendientes → animar salida después de 900ms
-  // (tiempo para que el usuario vea la sección y toque un resultado)
-  if(filter==='pendiente'){
-    const card = document.getElementById(`card-${id}`);
-    if(card){
-      setTimeout(()=>{
-        card.style.transition='opacity .4s,transform .4s';
-        card.style.opacity='0'; card.style.transform='translateX(70px)';
-        setTimeout(()=>render(), 420);
-      }, 900);
-    }
+  const target = (tipo==='llamada') ? secLlamada : secWa;
+  if(target){
+    target.style.display='block';
+    target.classList.add('flash');
+    setTimeout(()=>{ target.scrollIntoView({behavior:'smooth',block:'center'}); }, 200);
+    setTimeout(()=>target.classList.remove('flash'), 1900);
   }
+
+  // marca visual de que ya fue tocado, sin quitarlo
+  const card = document.getElementById(`card-${id}`);
+  if(card) card.classList.add('tocado');
 }
 
-// Guarda resultado (llamada o WA) y actualiza pill sin re-render total
+// Guarda resultado (llamada o WA) y actualiza in situ, SIN sacar la tarjeta
 function setRes(id, campo, val){
   const c = clients.find(x=>x.id===id); if(!c) return;
   c[campo] = (c[campo]===val) ? '' : val;
+  c.tocado = true;
   guardar();
   actualizarProgreso();
 
-  // Si ya está tocado y estamos en pendientes → ya lo maneja abrirSec, no hacer nada extra
-  // Si estamos en "llamados" y desmarca todo → actualizar pills sin mover
-  if(filter==='pendiente' && c.tocado){
-    // ya salió por abrirSec, solo actualizar contadores
-    return;
-  }
-
-  // Si sigue visible → actualizar solo los botones y pills sin re-render
+  // actualizar botones de esa sección
   const sec = campo==='resLlamada'
     ? document.getElementById(`sec-llamada-${id}`)
     : document.getElementById(`sec-wa-${id}`);
@@ -488,7 +484,8 @@ function setRes(id, campo, val){
       btn.className = 'res-btn' + (c[campo]===v ? ' sel sel-'+v : '');
     });
   }
-  const card = document.getElementById(`card-${c.id}`);
+  // actualizar pills arriba
+  const card = document.getElementById(`card-${id}`);
   if(card){
     const rLbl2={interesado:'🎉 Interesado',volver_llamar:'🔁 Volver a llamar',
       no_atendio:'📴 No atendió',no_interesa:'🙅 No le interesa',numero_malo:'🚫 Nro malo',
@@ -504,7 +501,7 @@ function setRes(id, campo, val){
       card.querySelector('.card-sub').after(pillDiv);
     }
     if(pillDiv) pillDiv.innerHTML = pills.join('');
-    card.classList.toggle('done', !!(c.resLlamada||c.resWa));
+    card.classList.add('done');
   }
 }
 
@@ -543,9 +540,11 @@ function telInternacional(num){
   if(d.startsWith('0')) d=d.slice(1);
   return '+549'+d;
 }
-function vcardDe(c){
+function vcardDe(c, prefijo){
   const tel = c.tels[0]||'';
-  const v = ['BEGIN:VCARD','VERSION:3.0',`FN:${c.nombre}`,'ORG:Mega Sports'];
+  const pre = prefijo ? prefijo.trim()+' ' : '';
+  const nombreFinal = pre + c.nombre;
+  const v = ['BEGIN:VCARD','VERSION:3.0',`FN:${nombreFinal}`,'ORG:Mega Sports'];
   if(tel) v.push(`TEL;TYPE=CELL:${telInternacional(tel)}`);
   const nota = ['Crédito preaprobado $500.000', c.dni?`DNI ${c.dni}`:'', c.comercio?`Comercio ${c.comercio}`:''].filter(Boolean).join(' · ');
   v.push(`NOTE:${nota}`);
@@ -560,19 +559,30 @@ function descargarVCF(texto, nombreArchivo){
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
 }
+// recuerda el último prefijo usado
+function getPrefijo(){ return localStorage.getItem('llamadas_prefijo') || '500'; }
+function pedirPrefijo(){
+  const guardado = getPrefijo();
+  const p = prompt('¿Qué poner ADELANTE del nombre del contacto?\n\nEsto sirve para identificarlos juntos en la agenda y armar una difusión sin que WhatsApp te bloquee.\n\nEjemplo: si ponés  500  el contacto queda:\n"500 Ayelen Blanco"\n\n(Dejá vacío si no querés prefijo)', guardado);
+  if(p===null) return null;
+  localStorage.setItem('llamadas_prefijo', p.trim());
+  return p.trim();
+}
 function agendarUno(id){
   const c = clients.find(x=>x.id===id); if(!c) return;
   if(!c.tels[0]){ toast('⚠️ Sin teléfono para agendar'); return; }
-  const safe = c.nombre.replace(/[^\w\s-]/g,'').trim().replace(/\s+/g,'_') || 'contacto';
-  descargarVCF(vcardDe(c), `${safe}.vcf`);
+  const pre = pedirPrefijo(); if(pre===null) return;
+  const safe = (pre?pre+'_':'') + c.nombre.replace(/[^\w\s-]/g,'').trim().replace(/\s+/g,'_') || 'contacto';
+  descargarVCF(vcardDe(c, pre), `${safe}.vcf`);
   toast('➕ Abrí el archivo para guardarlo en Contactos');
 }
 function agendarTodos(){
   const conTel = clients.filter(c=>c.tels[0]);
   if(!conTel.length){ toast('⚠️ No hay clientes con teléfono'); return; }
-  if(!confirm(`Agendar ${conTel.length} contactos en el celular?\n\nSe descarga un archivo — abrilo y elegí "Importar / Agregar a contactos".`)) return;
-  const texto = conTel.map(vcardDe).join('\r\n');
-  descargarVCF(texto, `clientes_megasports_${new Date().toISOString().slice(0,10)}.vcf`);
+  const pre = pedirPrefijo(); if(pre===null) return;
+  if(!confirm(`Agendar ${conTel.length} contactos${pre?` con "${pre}" adelante`:''}?\n\nEjemplo: "${pre?pre+' ':''}${conTel[0].nombre}"\n\nSe descarga un archivo — abrilo y elegí "Importar / Agregar a contactos".`)) return;
+  const texto = conTel.map(c=>vcardDe(c, pre)).join('\r\n');
+  descargarVCF(texto, `clientes${pre?'_'+pre:''}_${new Date().toISOString().slice(0,10)}.vcf`);
   toast(`📇 ${conTel.length} contactos · abrí el archivo para agendarlos`);
 }
 
