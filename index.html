@@ -60,6 +60,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .tel-extra{display:flex;gap:.45rem;flex-wrap:wrap;margin-bottom:.6rem;}
 .tel-chip{flex:1;min-width:120px;display:flex;align-items:center;justify-content:center;gap:.35rem;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.6rem;font-size:.82rem;font-weight:600;text-decoration:none;}
 .wa-chip{display:inline-flex;align-items:center;gap:.3rem;color:var(--green);background:rgba(46,213,115,.12);border:1px solid rgba(46,213,115,.3);border-radius:9px;padding:.5rem .8rem;font-size:.8rem;font-weight:600;text-decoration:none;}
+.sms-chip{display:inline-flex;align-items:center;gap:.3rem;color:var(--warn);background:rgba(245,168,0,.1);border:1px solid rgba(245,168,0,.3);border-radius:9px;padding:.5rem .8rem;font-size:.8rem;font-weight:600;text-decoration:none;}
 
 /* SECCIONES RESULTADO */
 .sec-result{border-radius:12px;padding:.75rem;margin-bottom:.5rem;border:1.5px solid var(--border);}
@@ -256,7 +257,15 @@ function waLink(num, nombre){
   return `https://wa.me/549${d}?text=${encodeURIComponent(msg)}`;
 }
 
-// ── PERSISTENCIA ──────────────────────────────────────────
+function smsLink(num, nombre){
+  const d = num.replace(/\D/g,'');
+  const plantilla = document.getElementById('waMsg')?.value || WA_MSG_DEFAULT;
+  // SMS usa el mismo mensaje pero sin formato markdown de WA
+  const msg = plantilla
+    .replace(/{nombre}/g, nombre||'')
+    .replace(/\*/g,'').replace(/_/g,'');
+  return `sms:${d}?body=${encodeURIComponent(msg)}`;
+}
 function guardar(){
   try{
     localStorage.setItem('llamadas_data',  JSON.stringify(clients));
@@ -326,9 +335,34 @@ function procesar(raw){
       nota: ''
     };
   });
+  // ── COMBINAR con lo que ya estaba cargado (no borrar resultados) ──
+  const previos = clients.slice();
+  // claves de búsqueda: DNI o, si no hay, el teléfono
+  const claveDe = c => (c.dni && c.dni.length>=6) ? 'dni:'+c.dni : (c.tels[0] ? 'tel:'+c.tels[0] : null);
+  const mapaPrevios = {};
+  previos.forEach(c=>{ const k=claveDe(c); if(k) mapaPrevios[k]=c; });
+
+  let conservados = 0;
+  nuevos.forEach(c=>{
+    const k = claveDe(c);
+    const viejo = k ? mapaPrevios[k] : null;
+    if(viejo){
+      // mantener lo ya trabajado
+      c.resLlamada = viejo.resLlamada || '';
+      c.resWa      = viejo.resWa || '';
+      c.nota       = viejo.nota || '';
+      c.tocado     = !!(c.resLlamada || c.resWa);
+      if(c.resLlamada || c.resWa || c.nota) conservados++;
+    }
+  });
+
   clients = nuevos;
   guardar();
-  toast(`✅ ${clients.length} clientes cargados`);
+  if(conservados>0){
+    toast(`✅ ${clients.length} clientes · se mantuvieron ${conservados} ya marcados`);
+  } else {
+    toast(`✅ ${clients.length} clientes cargados`);
+  }
   iniciar();
 }
 
@@ -395,8 +429,8 @@ function render(){
       ${tel1 ? `
         <a href="${telLink(tel1)}" class="call-main" onclick="abrirSec(${c.id},'llamada')">📞 Llamar — ${tel1}</a>
         <div style="display:flex;gap:.45rem;margin-bottom:.55rem;">
-          <button class="tel-chip" onclick="agendarUno(${c.id})">➕ Agendar</button>
-          <a href="${waLink(tel1,c.nombre)}" target="_blank" class="wa-chip" onclick="abrirSec(${c.id},'wa')">💬 WhatsApp</a>
+          <a href="${waLink(tel1,c.nombre)}" target="_blank" class="wa-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa')">💬 WhatsApp</a>
+          <a href="${smsLink(tel1,c.nombre)}" class="sms-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa')">✉️ Mensaje</a>
         </div>
       ` : `<div style="color:var(--danger);font-size:.85rem;margin-bottom:.6rem;">⚠️ Sin teléfono</div>`}
 
