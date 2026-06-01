@@ -30,6 +30,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .filters{display:flex;gap:.4rem;align-items:center;}
 .chip{flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:9px;padding:.5rem .3rem;font-size:.8rem;font-weight:600;cursor:pointer;text-align:center;font-family:'DM Sans',sans-serif;}
 .chip.active{background:rgba(56,182,255,.15);border-color:var(--call);color:var(--call);}
+.subfilters{display:flex;gap:.35rem;margin-top:.5rem;}
+.subchip{flex:1;background:var(--card);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.4rem .2rem;font-size:.74rem;font-weight:600;cursor:pointer;text-align:center;font-family:'DM Sans',sans-serif;}
+.subchip.active{background:rgba(168,85,247,.15);border-color:var(--purple);color:var(--purple);}
 .search{margin-top:.55rem;display:flex;align-items:center;gap:.5rem;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:.5rem .8rem;}
 .search input{flex:1;background:none;border:none;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;}
 
@@ -135,6 +138,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="chip" id="chipDone" onclick="setFilter('llamados')">Llamados</button>
     <button class="chip" id="chipAll" onclick="setFilter('todos')">Todos</button>
   </div>
+  <!-- Sub-filtro por tipo (solo en Llamados) -->
+  <div class="subfilters" id="subTipo" style="display:none;">
+    <button class="subchip active" data-tipo="todos" onclick="setSubTipo('todos')">Todos</button>
+    <button class="subchip" data-tipo="llamada" onclick="setSubTipo('llamada')">📞 Llamada</button>
+    <button class="subchip" data-tipo="wa" onclick="setSubTipo('wa')">💬 WhatsApp</button>
+    <button class="subchip" data-tipo="sms" onclick="setSubTipo('sms')">✉️ Mensaje</button>
+  </div>
+  <!-- Filtro por comercio (aparece si hay más de uno) -->
+  <div class="search" id="comercioWrap" style="display:none;margin-top:.5rem;">
+    🏬 <select id="comercioSel" onchange="render()" style="flex:1;background:none;border:none;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;"></select>
+  </div>
   <div class="search" id="searchWrap" style="display:none;">
     🔍 <input type="text" id="search" placeholder="Buscar por nombre o teléfono..." oninput="render()">
   </div>
@@ -151,9 +165,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </div>
 
 <div class="footbar" id="footbar">
-  <button class="foot-btn" onclick="agendarTodos()" style="background:rgba(56,182,255,.12);border-color:rgba(56,182,255,.35);color:var(--call);">📇 Agendar todos</button>
+  <button class="foot-btn" onclick="agendarTodos()" style="background:rgba(56,182,255,.12);border-color:rgba(56,182,255,.35);color:var(--call);">📇 Agendar</button>
   <button class="foot-btn green" onclick="exportar()">📊 Excel</button>
-  <button class="foot-btn" onclick="cargarOtro()">📂 Otro</button>
+  <button class="foot-btn" onclick="imprimir()" style="background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.35);color:var(--purple);">🖨️ Imprimir</button>
   <button class="foot-btn danger" onclick="limpiar()">🗑</button>
 </div>
 
@@ -289,8 +303,16 @@ function cargar(){
 }
 
 // ── LEER EXCEL ────────────────────────────────────────────
+let modoCarga = 'reemplazar'; // 'reemplazar' o 'sumar'
 document.getElementById('file').addEventListener('change', e=>{
   const f = e.target.files[0]; if(!f) return;
+  // Si ya hay clientes, preguntar si sumar o reemplazar
+  if(clients.length){
+    const sumar = confirm(`Ya tenés ${clients.length} clientes cargados.\n\n✅ ACEPTAR = SUMAR el nuevo Excel a la lista (para juntar 2 comercios)\n❌ CANCELAR = REEMPLAZAR todo por el nuevo Excel`);
+    modoCarga = sumar ? 'sumar' : 'reemplazar';
+  } else {
+    modoCarga = 'reemplazar';
+  }
   const r = new FileReader();
   r.onload = ev=>{
     try{
@@ -335,10 +357,50 @@ function procesar(raw){
       nota: ''
     };
   });
-  // ── COMBINAR con lo que ya estaba cargado (no borrar resultados) ──
-  const previos = clients.slice();
-  // claves de búsqueda: DNI o, si no hay, el teléfono
+  // clave de identidad: DNI o, si no hay, el teléfono
   const claveDe = c => (c.dni && c.dni.length>=6) ? 'dni:'+c.dni : (c.tels[0] ? 'tel:'+c.tels[0] : null);
+
+  if(modoCarga==='sumar' && clients.length){
+    // ── SUMAR: agregar el nuevo Excel a los que ya están ──
+    const mapaActual = {};
+    clients.forEach(c=>{ const k=claveDe(c); if(k) mapaActual[k]=c; });
+
+    const duplicados = [];
+    let agregados = 0;
+    const base = clients.length;
+    nuevos.forEach((c,j)=>{
+      const k = claveDe(c);
+      const yaExiste = k ? mapaActual[k] : null;
+      if(yaExiste){
+        // duplicado: si está en otro comercio, avisar
+        if(yaExiste.comercio && c.comercio && yaExiste.comercio!==c.comercio){
+          duplicados.push(`${c.nombre} (${yaExiste.comercio} / ${c.comercio})`);
+        } else {
+          duplicados.push(c.nombre);
+        }
+        // no lo agrego de nuevo
+      } else {
+        c.id = base + agregados;
+        c.n  = base + agregados + 1;
+        clients.push(c);
+        if(k) mapaActual[k]=c;
+        agregados++;
+      }
+    });
+    guardar();
+    if(duplicados.length){
+      const lista = duplicados.slice(0,8).join('\n• ');
+      const extra = duplicados.length>8 ? `\n…y ${duplicados.length-8} más` : '';
+      alert(`⚠️ Se sumaron ${agregados} clientes.\n\nHay ${duplicados.length} REPETIDOS (no se duplicaron):\n\n• ${lista}${extra}`);
+    } else {
+      toast(`✅ Se sumaron ${agregados} clientes (total ${clients.length})`);
+    }
+    iniciar();
+    return;
+  }
+
+  // ── REEMPLAZAR: pero conservar resultados de los que ya estaban ──
+  const previos = clients.slice();
   const mapaPrevios = {};
   previos.forEach(c=>{ const k=claveDe(c); if(k) mapaPrevios[k]=c; });
 
@@ -347,9 +409,9 @@ function procesar(raw){
     const k = claveDe(c);
     const viejo = k ? mapaPrevios[k] : null;
     if(viejo){
-      // mantener lo ya trabajado
       c.resLlamada = viejo.resLlamada || '';
       c.resWa      = viejo.resWa || '';
+      c.canalMsg   = viejo.canalMsg || '';
       c.nota       = viejo.nota || '';
       c.tocado     = !!(c.resLlamada || c.resWa);
       if(c.resLlamada || c.resWa || c.nota) conservados++;
@@ -367,25 +429,62 @@ function procesar(raw){
 }
 
 // ── RENDER ────────────────────────────────────────────────
+let subTipo = 'todos';
+
 function setFilter(f){
   filter = f;
   document.getElementById('chipPend').classList.toggle('active', f==='pendiente');
   document.getElementById('chipDone').classList.toggle('active', f==='llamados');
   document.getElementById('chipAll').classList.toggle('active', f==='todos');
+  // sub-filtro de tipo solo en "Llamados"
+  document.getElementById('subTipo').style.display = (f==='llamados') ? 'flex' : 'none';
+  render();
+}
+
+function setSubTipo(t){
+  subTipo = t;
+  document.querySelectorAll('#subTipo .subchip').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('data-tipo')===t);
+  });
   render();
 }
 
 function visibles(){
   const q = (document.getElementById('search').value||'').toLowerCase();
+  const com = document.getElementById('comercioSel')?.value || '';
   return clients.filter(c=>{
     if(filter==='pendiente' && c.tocado) return false;
     if(filter==='llamados'  && !c.tocado) return false;
+    // sub-filtro por tipo de contacto (en Llamados)
+    if(filter==='llamados' && subTipo!=='todos'){
+      if(subTipo==='llamada' && !c.resLlamada) return false;
+      if(subTipo==='wa'  && !(c.resWa && c.canalMsg==='wa')) return false;
+      if(subTipo==='sms' && !(c.resWa && c.canalMsg==='sms')) return false;
+    }
+    // filtro por comercio
+    if(com && c.comercio!==com) return false;
     if(q){
       const hay = (c.nombre+' '+c.dni+' '+c.tels.join(' ')+' '+c.comercio).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
   });
+}
+
+function poblarComercios(){
+  const sel = document.getElementById('comercioSel');
+  const wrap = document.getElementById('comercioWrap');
+  if(!sel) return;
+  const comercios = [...new Set(clients.map(c=>c.comercio).filter(Boolean))].sort();
+  if(comercios.length>=2){
+    const actual = sel.value;
+    sel.innerHTML = '<option value="">🏬 Todos los comercios</option>' +
+      comercios.map(co=>`<option value="${co}">${co}</option>`).join('');
+    if(actual) sel.value = actual;
+    wrap.style.display = 'flex';
+  } else {
+    wrap.style.display = 'none';
+  }
 }
 
 function render(){
@@ -429,8 +528,8 @@ function render(){
       ${tel1 ? `
         <a href="${telLink(tel1)}" class="call-main" onclick="abrirSec(${c.id},'llamada')">📞 Llamar — ${tel1}</a>
         <div style="display:flex;gap:.45rem;margin-bottom:.55rem;">
-          <a href="${waLink(tel1,c.nombre)}" target="_blank" class="wa-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa')">💬 WhatsApp</a>
-          <a href="${smsLink(tel1,c.nombre)}" class="sms-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa')">✉️ Mensaje</a>
+          <a href="${waLink(tel1,c.nombre)}" target="_blank" class="wa-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','wa')">💬 WhatsApp</a>
+          <a href="${smsLink(tel1,c.nombre)}" class="sms-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','sms')">✉️ Mensaje</a>
         </div>
       ` : `<div style="color:var(--danger);font-size:.85rem;margin-bottom:.6rem;">⚠️ Sin teléfono</div>`}
 
@@ -446,9 +545,9 @@ function render(){
         </div>
       </div>
 
-      <!-- SECCIÓN WA -->
+      <!-- SECCIÓN MENSAJE (WA / SMS) -->
       <div class="sec-result wa" id="sec-wa-${c.id}" style="display:${c.resWa?'block':'none'};">
-        <div class="sec-title">💬 Resultado de WhatsApp</div>
+        <div class="sec-title">💬 Resultado del mensaje (WhatsApp / SMS)</div>
         <div class="res-grid-2">
           ${rBtn(c.id,'resWa','enviado',     '✅ Enviado')}
           ${rBtn(c.id,'resWa','contesto',    '💬 Contestó')}
@@ -478,8 +577,11 @@ function actualizarProgreso(){
 // ── ACCIONES ──────────────────────────────────────────────
 
 // Abre la sección correcta al tocar Llamar o WA (NO saca la tarjeta sola)
-function abrirSec(id, tipo){
+function abrirSec(id, tipo, canal){
   const c = clients.find(x=>x.id===id); if(!c) return;
+
+  // recordar canal del mensaje (wa o sms) para el sub-filtro
+  if(canal){ c.canalMsg = canal; guardar(); }
 
   const secLlamada = document.getElementById(`sec-llamada-${id}`);
   const secWa      = document.getElementById(`sec-wa-${id}`);
@@ -490,8 +592,6 @@ function abrirSec(id, tipo){
     setTimeout(()=>{ target.scrollIntoView({behavior:'smooth', block:'center'}); }, 200);
     setTimeout(()=>target.classList.remove('flash'), 1900);
   }
-
-  // marca visual sin mover la tarjeta — la mueve setRes cuando el usuario toca un botón
   const card = document.getElementById(`card-${id}`);
   if(card) card.classList.add('tocado');
 }
@@ -635,22 +735,78 @@ function exportar(){
   const rLbl={interesado:'🎉 Interesado',volver_llamar:'🔁 Volver a llamar',
     no_atendio:'📴 No atendió',no_interesa:'🙅 No le interesa',numero_malo:'🚫 Nro malo',
     enviado:'✅ Enviado',contesto:'💬 Contestó',no_contesta:'📵 No contesta'};
+  const canalLbl={wa:'WhatsApp',sms:'Mensaje/SMS'};
   const rows = clients.map((c,i)=>({
-    '#': i+1,
+    '#': c.n||i+1,
     'Nombre': c.nombre,
     'DNI': c.dni,
     'Comercio': c.comercio,
     'Teléfono': c.tels[0]||'',
     'Resultado Llamada': rLbl[c.resLlamada]||c.resLlamada||'⏳ Pendiente',
-    'Resultado WA':      rLbl[c.resWa]||c.resWa||'⏳ Pendiente',
+    'Resultado Mensaje': rLbl[c.resWa]||c.resWa||'⏳ Pendiente',
+    'Canal Mensaje': c.resWa?(canalLbl[c.canalMsg]||''):'',
     'Nota': c.nota||''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:20},{wch:18},{wch:30}];
+  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:28}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Llamadas');
   XLSX.writeFile(wb, `llamadas_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast(`📊 ${rows.length} resultados exportados`);
+}
+
+// ── IMPRIMIR: una tabla compacta, todo junto, sin desperdiciar hojas ──
+function imprimir(){
+  if(!clients.length){ toast('⚠️ No hay datos'); return; }
+  const rLbl={interesado:'🎉 Interesado',volver_llamar:'🔁 Volver a llamar',
+    no_atendio:'📴 No atendió',no_interesa:'🙅 No le interesa',numero_malo:'🚫 Nro malo',
+    enviado:'✅ Enviado',contesto:'💬 Contestó',no_contesta:'📵 No contesta'};
+  const data = visibles(); // imprime lo que estás viendo (respeta filtros)
+  const com = document.getElementById('comercioSel')?.value || '';
+  const filas = data.map(c=>{
+    const llam = rLbl[c.resLlamada]||c.resLlamada||'—';
+    const msg  = rLbl[c.resWa]||c.resWa||'—';
+    const canal = c.resWa ? (c.canalMsg==='sms'?' (SMS)':c.canalMsg==='wa'?' (WA)':'') : '';
+    return `<tr>
+      <td class="n">${c.n||''}</td>
+      <td>${c.nombre}</td>
+      <td>${c.dni||''}</td>
+      <td>${c.comercio||''}</td>
+      <td>${c.tels[0]||''}</td>
+      <td>${llam}</td>
+      <td>${msg}${canal}</td>
+      <td>${c.nota||''}</td>
+    </tr>`;
+  }).join('');
+
+  const titulo = com ? `Llamadas — ${com}` : 'Llamadas — Crédito Preaprobado';
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo}</title>
+  <style>
+    @page{size:A4;margin:10mm;}
+    *{box-sizing:border-box;}
+    body{font-family:Arial,sans-serif;color:#000;font-size:10px;margin:0;}
+    h1{font-size:15px;margin:0 0 2px;}
+    .meta{font-size:10px;color:#444;margin-bottom:8px;}
+    table{width:100%;border-collapse:collapse;}
+    th,td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top;}
+    th{background:#eee;font-size:9px;text-transform:uppercase;}
+    td.n{text-align:center;width:26px;font-weight:bold;}
+    tr{page-break-inside:avoid;}
+    thead{display:table-header-group;}
+  </style></head><body>
+    <h1>${titulo}</h1>
+    <div class="meta">${data.length} clientes · ${new Date().toLocaleDateString('es-AR')}</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Nombre</th><th>DNI</th><th>Comercio</th><th>Teléfono</th>
+        <th>Llamada</th><th>Mensaje</th><th>Nota</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+  </body></html>`);
+  win.document.close();
+  setTimeout(()=>{ win.focus(); win.print(); }, 400);
 }
 function cargarOtro(){
   document.getElementById('file').click();
@@ -680,6 +836,7 @@ function iniciar(){
   document.getElementById('filters').style.display = 'flex';
   document.getElementById('searchWrap').style.display = 'flex';
   document.getElementById('prog').classList.add('show');
+  poblarComercios();
   render();
 }
 
