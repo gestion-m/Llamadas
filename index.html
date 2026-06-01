@@ -47,7 +47,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .upload p{color:var(--muted);font-size:.82rem;line-height:1.5;}
 
 /* CARD */
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.85rem;transition:opacity .2s;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.85rem;transition:opacity .2s;overflow:hidden;}
 .card.done{border-color:rgba(46,213,115,.35);}
 .card.tocado{border-color:rgba(56,182,255,.45);}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.6rem;margin-bottom:.2rem;}
@@ -576,7 +576,7 @@ function actualizarProgreso(){
 
 // ── ACCIONES ──────────────────────────────────────────────
 
-// Abre la sección correcta al tocar Llamar o WA (NO saca la tarjeta sola)
+// Abre la sección correcta al tocar Llamar o WA (NO saca la tarjeta sola, NO mueve la pantalla)
 function abrirSec(id, tipo, canal){
   const c = clients.find(x=>x.id===id); if(!c) return;
 
@@ -588,8 +588,8 @@ function abrirSec(id, tipo, canal){
   const target = (tipo==='llamada') ? secLlamada : secWa;
   if(target){
     target.style.display = 'block';
+    // breve destello para que se note, SIN mover la pantalla
     target.classList.add('flash');
-    setTimeout(()=>{ target.scrollIntoView({behavior:'smooth', block:'center'}); }, 200);
     setTimeout(()=>target.classList.remove('flash'), 1900);
   }
   const card = document.getElementById(`card-${id}`);
@@ -605,15 +605,28 @@ function setRes(id, campo, val){
   guardar();
   actualizarProgreso();
 
-  // Si estamos en Pendientes y tiene al menos un resultado → animar salida
+  // Si estamos en Pendientes y tiene al menos un resultado → sacar SOLO esa tarjeta (sin redibujar todo)
   if(filter==='pendiente' && (c.resLlamada || c.resWa)){
     const card = document.getElementById(`card-${id}`);
     if(card){
-      card.style.transition = 'opacity .35s, transform .35s';
-      card.style.opacity = '0';
-      card.style.transform = 'translateX(70px)';
-      setTimeout(()=>render(), 380);
-    } else { render(); }
+      card.style.transition = 'opacity .35s, transform .35s, max-height .4s, margin .4s, padding .4s';
+      card.style.maxHeight = card.offsetHeight + 'px';
+      requestAnimationFrame(()=>{
+        card.style.opacity = '0';
+        card.style.transform = 'translateX(70px)';
+        card.style.maxHeight = '0';
+        card.style.marginBottom = '0';
+        card.style.paddingTop = '0';
+        card.style.paddingBottom = '0';
+      });
+      setTimeout(()=>{
+        card.remove();
+        // si ya no quedan tarjetas, mostrar vacío
+        if(!document.querySelector('#list .card')){
+          document.getElementById('list').innerHTML='<div class="empty"><div class="ic">🎉</div><p>¡No quedan pendientes!</p></div>';
+        }
+      }, 420);
+    }
     return;
   }
 
