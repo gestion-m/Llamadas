@@ -108,9 +108,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .sheet .sub{font-size:.76rem;color:var(--muted);margin-bottom:.9rem;}
 .sheet textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:.85rem;color:var(--text);font-size:.92rem;line-height:1.55;font-family:'DM Sans',sans-serif;min-height:300px;outline:none;resize:vertical;}
 .sheet-tabs{display:flex;gap:.4rem;margin-bottom:1rem;}
-.sheet-tab{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:9px;padding:.55rem;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;text-align:center;}
+.sheet-tab{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:9px;padding:.55rem .3rem;font-size:.8rem;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;text-align:center;}
 .sheet-tab.active{background:rgba(56,182,255,.15);border-color:var(--call);color:var(--call);}
 .sheet-tab.wa.active{background:rgba(46,213,115,.15);border-color:var(--green);color:var(--green);}
+.sheet-tab#tabFolleto.active{background:rgba(245,168,0,.15);border-color:var(--warn);color:var(--warn);}
 .sheet-close{width:100%;background:var(--call);color:#022;border:none;border-radius:12px;padding:.85rem;font-weight:800;font-family:'Syne',sans-serif;font-size:1rem;margin-top:.9rem;cursor:pointer;}
 
 /* TOAST */
@@ -176,8 +177,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="sheet">
     <div class="sheet-grab"></div>
     <div class="sheet-tabs">
-      <button class="sheet-tab active" id="tabGuion" onclick="switchTab('guion')">📖 Guion llamada</button>
-      <button class="sheet-tab wa" id="tabWa" onclick="switchTab('wa')">💬 Mensaje WA</button>
+      <button class="sheet-tab active" id="tabGuion" onclick="switchTab('guion')">📖 Guion</button>
+      <button class="sheet-tab wa" id="tabWa" onclick="switchTab('wa')">💬 Mensaje</button>
+      <button class="sheet-tab" id="tabFolleto" onclick="switchTab('folleto')" style="--act:var(--warn);">📷 Folleto</button>
     </div>
 
     <!-- PANEL GUION -->
@@ -190,6 +192,24 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div id="panelWa" style="display:none;">
       <p class="sub">Se envía automáticamente al tocar 💬 WhatsApp. Usá {nombre} para personalizar.</p>
       <textarea id="waMsg"></textarea>
+    </div>
+
+    <!-- PANEL FOLLETO -->
+    <div id="panelFolleto" style="display:none;">
+      <p class="sub">Cargá el folleto de la promo. Se manda por WhatsApp junto con el mensaje cuando tocás 🖼️ en cada cliente.</p>
+      <div id="folletoEmpty" style="border:2px dashed var(--border);border-radius:14px;padding:2rem 1rem;text-align:center;position:relative;cursor:pointer;">
+        <input type="file" accept="image/*" id="folletoFile" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;">
+        <div style="font-size:2.2rem;margin-bottom:.4rem;">🖼️</div>
+        <div style="font-weight:600;">Tocá para elegir la imagen</div>
+        <div style="font-size:.76rem;color:var(--muted);margin-top:.3rem;">Quedará guardada para todos los envíos</div>
+      </div>
+      <div id="folletoPreview" style="display:none;text-align:center;">
+        <img id="folletoImg" style="max-width:100%;max-height:300px;border-radius:12px;border:1px solid var(--border);margin-bottom:.7rem;">
+        <div style="display:flex;gap:.5rem;">
+          <button onclick="document.getElementById('folletoFile').click()" style="flex:1;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.7rem;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer;">🔄 Cambiar</button>
+          <button onclick="quitarFolleto()" style="flex:1;background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.3);color:var(--danger);border-radius:10px;padding:.7rem;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer;">🗑 Quitar</button>
+        </div>
+      </div>
     </div>
 
     <button class="sheet-close" onclick="cerrarGuion()">Listo ✓</button>
@@ -296,6 +316,8 @@ function cargar(){
     document.getElementById('guion').value = g || GUION_DEFAULT;
     const w = localStorage.getItem('llamadas_wa');
     document.getElementById('waMsg').value = w || WA_MSG_DEFAULT;
+    const fol = localStorage.getItem('llamadas_folleto');
+    if(fol){ folletoEnMemoria = fol; mostrarFolleto(fol); }
   }catch(e){
     document.getElementById('guion').value = GUION_DEFAULT;
     document.getElementById('waMsg').value = WA_MSG_DEFAULT;
@@ -527,10 +549,11 @@ function render(){
 
       ${tel1 ? `
         <a href="${telLink(tel1)}" class="call-main" onclick="abrirSec(${c.id},'llamada')">📞 Llamar — ${tel1}</a>
-        <div style="display:flex;gap:.45rem;margin-bottom:.55rem;">
+        <div style="display:flex;gap:.45rem;margin-bottom:.45rem;">
           <a href="${waLink(tel1,c.nombre)}" target="_blank" class="wa-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','wa')">💬 WhatsApp</a>
           <a href="${smsLink(tel1,c.nombre)}" class="sms-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','sms')">✉️ Mensaje</a>
         </div>
+        <button onclick="enviarConFoto(${c.id})" style="width:100%;margin-bottom:.55rem;background:rgba(245,168,0,.12);border:1px solid rgba(245,168,0,.4);color:var(--warn);border-radius:10px;padding:.6rem;font-family:'DM Sans',sans-serif;font-weight:600;font-size:.85rem;cursor:pointer;">🖼️ WhatsApp con folleto</button>
       ` : `<div style="color:var(--danger);font-size:.85rem;margin-bottom:.6rem;">⚠️ Sin teléfono</div>`}
 
       <!-- SECCIÓN LLAMADA -->
@@ -674,10 +697,12 @@ function setEstado(id,val){ }
 let tabActual = 'guion';
 function switchTab(tab){
   tabActual = tab;
-  document.getElementById('panelGuion').style.display = tab==='guion' ? '' : 'none';
-  document.getElementById('panelWa').style.display    = tab==='wa'    ? '' : 'none';
+  document.getElementById('panelGuion').style.display   = tab==='guion'   ? '' : 'none';
+  document.getElementById('panelWa').style.display      = tab==='wa'      ? '' : 'none';
+  document.getElementById('panelFolleto').style.display = tab==='folleto' ? '' : 'none';
   document.getElementById('tabGuion').classList.toggle('active', tab==='guion');
   document.getElementById('tabWa').classList.toggle('active', tab==='wa');
+  document.getElementById('tabFolleto').classList.toggle('active', tab==='folleto');
 }
 function abrirGuion(tab){
   switchTab(tab||'guion');
@@ -686,6 +711,98 @@ function abrirGuion(tab){
 function cerrarGuion(){
   guardar();
   document.getElementById('guionOv').classList.remove('show');
+}
+
+// ── FOLLETO (imagen para enviar por WhatsApp) ─────────────
+let folletoEnMemoria = null;
+
+function getFolleto(){
+  if(folletoEnMemoria) return folletoEnMemoria;
+  try{ return localStorage.getItem('llamadas_folleto'); }catch(e){ return null; }
+}
+function comprimirImg(img, maxW, q){
+  let w = img.width, h = img.height;
+  if(w > maxW){ h = Math.round(h*maxW/w); w = maxW; }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', q);
+}
+function mostrarFolleto(dataURL){
+  if(dataURL){
+    document.getElementById('folletoImg').src = dataURL;
+    document.getElementById('folletoPreview').style.display = 'block';
+    document.getElementById('folletoEmpty').style.display = 'none';
+  } else {
+    document.getElementById('folletoPreview').style.display = 'none';
+    document.getElementById('folletoEmpty').style.display = 'block';
+  }
+}
+function quitarFolleto(){
+  folletoEnMemoria = null;
+  try{ localStorage.removeItem('llamadas_folleto'); }catch(e){}
+  mostrarFolleto(null);
+  toast('🗑 Folleto quitado');
+}
+document.getElementById('folletoFile').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const img = new Image();
+    img.onload = ()=>{
+      // Comprimir hasta que sea liviano (achica tamaño y calidad de a poco)
+      let max = 900, q = 0.8;
+      let dataURL = comprimirImg(img, max, q);
+      while(dataURL.length > 900000 && (max > 480 || q > 0.4)){
+        if(q > 0.45){ q -= 0.1; } else { max -= 140; q = 0.7; }
+        dataURL = comprimirImg(img, max, q);
+      }
+      // Siempre queda en memoria (funciona en esta sesión seguro)
+      folletoEnMemoria = dataURL;
+      mostrarFolleto(dataURL);
+      // Intentar guardarlo fijo
+      let guardado = false;
+      try{ localStorage.setItem('llamadas_folleto', dataURL); guardado = true; }catch(err){ guardado = false; }
+      if(guardado){
+        toast('✅ Folleto guardado');
+      }else{
+        toast('⚠️ Folleto listo para esta sesión. Abrí la app desde el LINK para que quede fijo.');
+      }
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
+
+// Enviar mensaje + folleto por WhatsApp (usa el menú Compartir del celular)
+async function enviarConFoto(id){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  const dataURL = getFolleto();
+  if(!dataURL){
+    toast('📷 Primero cargá el folleto');
+    abrirGuion('folleto');
+    return;
+  }
+  const msg = (document.getElementById('waMsg')?.value || WA_MSG_DEFAULT).replace(/{nombre}/g, c.nombre||'');
+  try{
+    const blob = await (await fetch(dataURL)).blob();
+    const file = new File([blob], 'promo-megasports.jpg', {type: blob.type||'image/jpeg'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({ files:[file], text: msg });
+      c.canalMsg = 'wa'; guardar();
+      abrirSec(id, 'wa', 'wa');
+    } else {
+      // Fallback: descargar la foto y abrir el chat con texto
+      const a = document.createElement('a'); a.href = dataURL; a.download = 'promo-megasports.jpg';
+      document.body.appendChild(a); a.click(); a.remove();
+      if(c.tels[0]) window.open(waLink(c.tels[0], c.nombre), '_blank');
+      toast('📎 Adjuntá la foto descargada en el chat');
+      abrirSec(id, 'wa', 'wa');
+    }
+  }catch(err){
+    if(err && err.name!=='AbortError') toast('No se pudo compartir la foto');
+  }
 }
 
 // ── AGENDAR (guardar contacto en el celular) ──────────────
