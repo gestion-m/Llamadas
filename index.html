@@ -190,7 +190,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
     <!-- PANEL WA -->
     <div id="panelWa" style="display:none;">
-      <p class="sub">Se envía automáticamente al tocar 💬 WhatsApp. Usá {nombre} para personalizar.</p>
+      <p class="sub">Se envía automáticamente al tocar 💬 WhatsApp. Usá {nombre} y {cupo} para personalizar.</p>
       <textarea id="waMsg"></textarea>
     </div>
 
@@ -240,13 +240,15 @@ SI DICE QUE NO → "Ningún problema, igual te queda disponible por si cambiás 
 
 const WA_MSG_DEFAULT = `¡Hola {nombre}! 👋 Te escribimos de *Mega Sports*.
 
-Tenés un *crédito PREAPROBADO de $500.000* listo para usar en cualquiera de nuestras sucursales. 🎉
+Hace un tiempo que no venís, ¡y queremos que vuelvas! 🎉
+
+Tenés *{cupo} disponibles* de tu crédito para renovar y usar en cualquiera de nuestras sucursales.
 
 ✅ Sin trámites — ya estás aprobado/a
 ✅ En cuotas
 ✅ Para zapatillas, indumentaria, equipamiento deportivo y más
 
-Pasá cuando quieras con tu DNI y te lo activamos en el momento. 💪
+Pasá cuando quieras con tu DNI y renovamos tu crédito en el momento. 💪
 
 _Cualquier consulta, respondé este mensaje._`;
 
@@ -281,22 +283,30 @@ function limpiarTel(val){
   return d;
 }
 function telLink(num){ return 'tel:'+num.replace(/\D/g,''); }
-function waLink(num, nombre){
+
+// Reemplaza {nombre} y {cupo} en cualquier plantilla de mensaje
+function rellenarPlantilla(plantilla, c){
+  const cupoTxt = (c && c.cupoVencida) ? '$'+c.cupoVencida.toLocaleString('es-AR') : '$500.000';
+  return plantilla
+    .replace(/{nombre}/g, (c&&c.nombre)||'')
+    .replace(/{cupo}/g, cupoTxt);
+}
+
+function waLink(num, cliente){
   let d = num.replace(/\D/g,'');
   if(d.startsWith('549') && d.length>=12) d=d.slice(3);
   else if(d.startsWith('54') && d.length>=11) d=d.slice(2);
   if(d.startsWith('0')) d=d.slice(1);
   const plantilla = document.getElementById('waMsg')?.value || WA_MSG_DEFAULT;
-  const msg = plantilla.replace(/{nombre}/g, nombre||'');
+  const msg = rellenarPlantilla(plantilla, cliente);
   return `https://wa.me/549${d}?text=${encodeURIComponent(msg)}`;
 }
 
-function smsLink(num, nombre){
+function smsLink(num, cliente){
   const d = num.replace(/\D/g,'');
   const plantilla = document.getElementById('waMsg')?.value || WA_MSG_DEFAULT;
   // SMS usa el mismo mensaje pero sin formato markdown de WA
-  const msg = plantilla
-    .replace(/{nombre}/g, nombre||'')
+  const msg = rellenarPlantilla(plantilla, cliente)
     .replace(/\*/g,'').replace(/_/g,'');
   return `sms:${d}?body=${encodeURIComponent(msg)}`;
 }
@@ -364,7 +374,10 @@ function procesar(raw){
     const dk = f(['dni','doc','cedula','documento']);
     const ck = f(['codcomercio','comercio','sucursal','agencia']);
     const p1 = f(['tel1','telefono1','celular1','telefono','tel','phone','celular','movil','whatsapp','contacto']);
+    const cvk = f(['cupovencida','cupodisponible','montodisponible','cupo','disponible','saldodisponible','montoasacar']);
     const tel1 = limpiarTel(row[p1]);
+    const cupoRaw = String(row[cvk]||'').replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.');
+    const cupoVencida = cupoRaw ? parseFloat(cupoRaw) : 0;
     return {
       id: i,
       n: i+1,
@@ -372,10 +385,12 @@ function procesar(raw){
       dni: String(row[dk]||'').replace(/\D/g,''),
       comercio: String(row[ck]||'').trim(),
       tels: tel1 ? [tel1] : [],
+      cupoVencida: isNaN(cupoVencida) ? 0 : cupoVencida,
       estado: 'pendiente',
       resLlamada: '',
       resWa: '',
       tocado: false,
+      oculto: false,
       nota: ''
     };
   });
@@ -435,7 +450,10 @@ function procesar(raw){
       c.resWa      = viejo.resWa || '';
       c.canalMsg   = viejo.canalMsg || '';
       c.nota       = viejo.nota || '';
+      c.oculto     = viejo.oculto || false;
       c.tocado     = !!(c.resLlamada || c.resWa);
+      // si el nuevo Excel no trae teléfono pero ya se había cargado a mano, mantenerlo
+      if((!c.tels || !c.tels[0]) && viejo.tels && viejo.tels[0]) c.tels = viejo.tels;
       if(c.resLlamada || c.resWa || c.nota) conservados++;
     }
   });
@@ -475,6 +493,7 @@ function visibles(){
   const q = (document.getElementById('search').value||'').toLowerCase();
   const com = document.getElementById('comercioSel')?.value || '';
   return clients.filter(c=>{
+    if(c.oculto && filter!=='todos') return false;
     if(filter==='pendiente' && c.tocado) return false;
     if(filter==='llamados'  && !c.tocado) return false;
     // sub-filtro por tipo de contacto (en Llamados)
@@ -545,16 +564,24 @@ function render(){
         <span class="card-num">#${num}</span>
       </div>
       <div class="card-sub">${c.dni?`DNI <b>${c.dni}</b>`:''}${c.dni&&c.comercio?' · ':''}${c.comercio?`<b>${c.comercio}</b>`:''}</div>
+      ${c.cupoVencida ? `<div style="display:inline-block;font-size:.78rem;font-weight:800;color:var(--green);background:rgba(46,213,115,.12);border:1px solid rgba(46,213,115,.35);padding:.25rem .6rem;border-radius:8px;margin-bottom:.55rem;">💰 Cupo a sacar: $${c.cupoVencida.toLocaleString('es-AR')}</div>` : ''}
       ${pills.length?`<div class="pill-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem;">${pills.join('')}</div>`:''}
 
       ${tel1 ? `
         <a href="${telLink(tel1)}" class="call-main" onclick="abrirSec(${c.id},'llamada')">📞 Llamar — ${tel1}</a>
         <div style="display:flex;gap:.45rem;margin-bottom:.45rem;">
-          <a href="${waLink(tel1,c.nombre)}" target="_blank" class="wa-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','wa')">💬 WhatsApp</a>
-          <a href="${smsLink(tel1,c.nombre)}" class="sms-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','sms')">✉️ Mensaje</a>
+          <a href="${waLink(tel1,c)}" target="_blank" class="wa-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','wa')">💬 WhatsApp</a>
+          <a href="${smsLink(tel1,c)}" class="sms-chip" style="flex:1;justify-content:center;" onclick="abrirSec(${c.id},'wa','sms')">✉️ Mensaje</a>
         </div>
         <button onclick="enviarConFoto(${c.id})" style="width:100%;margin-bottom:.55rem;background:rgba(245,168,0,.12);border:1px solid rgba(245,168,0,.4);color:var(--warn);border-radius:10px;padding:.6rem;font-family:'DM Sans',sans-serif;font-weight:600;font-size:.85rem;cursor:pointer;">🖼️ WhatsApp con folleto</button>
-      ` : `<div style="color:var(--danger);font-size:.85rem;margin-bottom:.6rem;">⚠️ Sin teléfono</div>`}
+      ` : `
+        <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.6rem;">
+          <span style="color:var(--danger);font-size:.85rem;">⚠️ Sin teléfono</span>
+          <input type="tel" id="telManual-${c.id}" placeholder="Cargar número..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.5rem .7rem;color:var(--text);font-size:.85rem;outline:none;font-family:'DM Sans',sans-serif;">
+          <button onclick="guardarTelManual(${c.id})" style="background:rgba(46,213,115,.15);border:1px solid rgba(46,213,115,.4);color:var(--green);border-radius:8px;padding:.5rem .7rem;font-weight:700;cursor:pointer;">✓</button>
+          <button onclick="ocultarSinTel(${c.id})" title="Ocultar de pendientes" style="background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.3);color:var(--danger);border-radius:8px;padding:.5rem .65rem;font-weight:800;cursor:pointer;">✕</button>
+        </div>
+      `}
 
       <!-- SECCIÓN LLAMADA -->
       <div class="sec-result llamada" id="sec-llamada-${c.id}" style="display:${c.resLlamada?'block':'none'};">
@@ -590,8 +617,9 @@ function render(){
 }
 
 function actualizarProgreso(){
-  const total = clients.length;
-  const hechos = clients.filter(c=>c.tocado).length;
+  const activos = clients.filter(c=>!c.oculto);
+  const total = activos.length;
+  const hechos = activos.filter(c=>c.tocado).length;
   document.getElementById('progDone').textContent = hechos;
   document.getElementById('progTotal').textContent = total;
   document.getElementById('progFill').style.width = total?Math.round(hechos/total*100)+'%':'0%';
@@ -689,6 +717,42 @@ function setNota(id, val){
   c.nota = val; guardar();
 }
 
+// Cargar teléfono a mano cuando el Excel no lo trae
+function guardarTelManual(id){
+  const input = document.getElementById(`telManual-${id}`);
+  if(!input) return;
+  const limpio = limpiarTel(input.value);
+  if(!limpio){ toast('⚠️ Número inválido'); return; }
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  c.tels = [limpio];
+  guardar();
+  toast('✅ Teléfono cargado');
+  render();
+}
+
+// Ocultar de "Pendientes" a los que no tienen teléfono y no se van a poder contactar
+function ocultarSinTel(id){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  c.oculto = true;
+  guardar();
+  actualizarProgreso();
+  const card = document.getElementById(`card-${id}`);
+  if(card){
+    card.style.transition = 'opacity .3s, max-height .35s, margin .35s, padding .35s';
+    card.style.maxHeight = card.offsetHeight+'px';
+    requestAnimationFrame(()=>{
+      card.style.opacity='0'; card.style.maxHeight='0';
+      card.style.marginBottom='0'; card.style.paddingTop='0'; card.style.paddingBottom='0';
+    });
+    setTimeout(()=>{
+      card.remove();
+      if(!document.querySelector('#list .card')){
+        document.getElementById('list').innerHTML='<div class="empty"><div class="ic">🎉</div><p>¡No quedan pendientes!</p></div>';
+      }
+    }, 360);
+  }
+}
+
 // ya no necesaria pero la mantenemos por compatibilidad con datos viejos
 function marcarLlamado(id){ }
 function setEstado(id,val){ }
@@ -784,7 +848,7 @@ async function enviarConFoto(id){
     abrirGuion('folleto');
     return;
   }
-  const msg = (document.getElementById('waMsg')?.value || WA_MSG_DEFAULT).replace(/{nombre}/g, c.nombre||'');
+  const msg = rellenarPlantilla(document.getElementById('waMsg')?.value || WA_MSG_DEFAULT, c);
   try{
     const blob = await (await fetch(dataURL)).blob();
     const file = new File([blob], 'promo-megasports.jpg', {type: blob.type||'image/jpeg'});
@@ -796,7 +860,7 @@ async function enviarConFoto(id){
       // Fallback: descargar la foto y abrir el chat con texto
       const a = document.createElement('a'); a.href = dataURL; a.download = 'promo-megasports.jpg';
       document.body.appendChild(a); a.click(); a.remove();
-      if(c.tels[0]) window.open(waLink(c.tels[0], c.nombre), '_blank');
+      if(c.tels[0]) window.open(waLink(c.tels[0], c), '_blank');
       toast('📎 Adjuntá la foto descargada en el chat');
       abrirSec(id, 'wa', 'wa');
     }
@@ -872,13 +936,14 @@ function exportar(){
     'DNI': c.dni,
     'Comercio': c.comercio,
     'Teléfono': c.tels[0]||'',
+    'Cupo disponible': c.cupoVencida ? c.cupoVencida.toLocaleString('es-AR') : '',
     'Resultado Llamada': rLbl[c.resLlamada]||c.resLlamada||'⏳ Pendiente',
     'Resultado Mensaje': rLbl[c.resWa]||c.resWa||'⏳ Pendiente',
     'Canal Mensaje': c.resWa?(canalLbl[c.canalMsg]||''):'',
     'Nota': c.nota||''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:28}];
+  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:28}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Llamadas');
   XLSX.writeFile(wb, `llamadas_${new Date().toISOString().slice(0,10)}.xlsx`);
