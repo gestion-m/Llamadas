@@ -375,9 +375,24 @@ function procesar(raw){
     const ck = f(['codcomercio','comercio','sucursal','agencia']);
     const p1 = f(['tel1','telefono1','celular1','telefono','tel','phone','celular','movil','whatsapp','contacto']);
     const cvk = f(['cupovencida','cupodisponible','montodisponible','cupo','disponible','saldodisponible','montoasacar']);
+    let cupoVencida = 0;
+    const cvRaw = row[cvk];
+    if(typeof cvRaw === 'number'){
+      // XLSX ya lo entrega como número real (ej: 363999.72) — usar directo
+      cupoVencida = cvRaw;
+    } else if(cvRaw){
+      // viene como texto con formato argentino: $363.999,72
+      let s = String(cvRaw).replace(/[^\d,.-]/g,'');
+      const tieneComaDecimal = /,\d{1,2}$/.test(s);
+      if(tieneComaDecimal){
+        s = s.replace(/\./g,'').replace(',', '.'); // 363.999,72 → 363999.72
+      } else {
+        s = s.replace(/,/g,''); // por si viene con comas de miles estilo US
+      }
+      const n = parseFloat(s);
+      cupoVencida = isNaN(n) ? 0 : n;
+    }
     const tel1 = limpiarTel(row[p1]);
-    const cupoRaw = String(row[cvk]||'').replace(/[^\d,.-]/g,'').replace(/\./g,'').replace(',','.');
-    const cupoVencida = cupoRaw ? parseFloat(cupoRaw) : 0;
     return {
       id: i,
       n: i+1,
