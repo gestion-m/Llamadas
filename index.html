@@ -640,12 +640,13 @@ function render(){
       ${tel1 ? `
         <div style="display:flex;gap:.4rem;margin-bottom:.5rem;">
           <a href="${telLink(tel1)}" class="call-main" style="flex:1;" onclick="abrirSec(${c.id},'llamada')">📞 Llamar — ${tel1}</a>
-          <button onclick="editarTel(${c.id})" title="Editar número" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:12px;padding:0 .8rem;font-size:1rem;cursor:pointer;">✏️</button>
+          <button onclick="editarTel(${c.id})" title="Editar número" style="background:rgba(56,182,255,.12);border:1px solid rgba(56,182,255,.4);color:var(--call);border-radius:12px;padding:0 .9rem;font-size:1.1rem;cursor:pointer;flex-shrink:0;">✏️</button>
         </div>
-        <div id="editTelBox-${c.id}" style="display:none;margin-bottom:.5rem;">
+        <div id="editTelBox-${c.id}" style="display:none;background:rgba(56,182,255,.08);border:1px solid rgba(56,182,255,.3);border-radius:10px;padding:.6rem;margin-bottom:.5rem;">
+          <div style="font-size:.72rem;color:var(--call);font-weight:700;margin-bottom:.4rem;">✏️ EDITAR TELÉFONO</div>
           <div style="display:flex;gap:.4rem;">
-            <input type="tel" id="telEdit-${c.id}" value="${tel1}" style="flex:1;background:var(--bg);border:1px solid var(--call);border-radius:8px;padding:.5rem .7rem;color:var(--text);font-size:.85rem;outline:none;font-family:'DM Sans',sans-serif;">
-            <button onclick="guardarTelEditado(${c.id})" style="background:rgba(46,213,115,.15);border:1px solid rgba(46,213,115,.4);color:var(--green);border-radius:8px;padding:.5rem .7rem;font-weight:700;cursor:pointer;">✓</button>
+            <input type="tel" id="telEdit-${c.id}" value="${tel1}" style="flex:1;background:var(--bg);border:1px solid var(--call);border-radius:8px;padding:.55rem .7rem;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;">
+            <button onclick="guardarTelEditado(${c.id})" style="background:rgba(46,213,115,.18);border:1px solid var(--green);color:var(--green);border-radius:8px;padding:.5rem .9rem;font-weight:800;cursor:pointer;">✓ Guardar</button>
             <button onclick="cancelarEditTel(${c.id})" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:.5rem .7rem;cursor:pointer;">✕</button>
           </div>
         </div>
