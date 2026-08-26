@@ -150,12 +150,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="search" id="comercioWrap" style="display:none;margin-top:.5rem;">
     🏬 <select id="comercioSel" onchange="render()" style="flex:1;background:none;border:none;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;"></select>
   </div>
-  <!-- Orden por última compra -->
+  <!-- Orden por última compra / último crédito -->
   <div class="search" id="ordenWrap" style="display:none;margin-top:.5rem;">
     📅 <select id="ordenSel" onchange="render()" style="flex:1;background:none;border:none;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;">
       <option value="">Orden: por número (#)</option>
-      <option value="antigua">Hace más que no compran primero</option>
-      <option value="reciente">Compraron más recientemente primero</option>
+      <option value="compra_antigua">🛒 Compra: hace más que no vienen</option>
+      <option value="compra_reciente">🛒 Compra: más recientes primero</option>
+      <option value="credito_antigua">💳 Crédito: hace más que no sacan</option>
+      <option value="credito_reciente">💳 Crédito: más recientes primero</option>
     </select>
   </div>
   <div class="search" id="searchWrap" style="display:none;">
@@ -368,6 +370,25 @@ document.getElementById('file').addEventListener('change', e=>{
   r.readAsBinaryString(f);
 });
 
+// Parsea una celda de fecha del Excel: puede venir como Date o como texto DD/MM/AAAA
+function parsearFechaExcel(raw){
+  if(raw instanceof Date && !isNaN(raw)){
+    return [raw.toLocaleDateString('es-AR'), raw.getTime()];
+  }
+  if(raw){
+    const txt = String(raw).trim();
+    const m = txt.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    if(m){
+      let [, d, mo, y] = m;
+      if(y.length===2) y = '20'+y;
+      const dt = new Date(+y, +mo-1, +d);
+      if(!isNaN(dt)) return [txt, dt.getTime()];
+    }
+    return [txt, 0];
+  }
+  return ['', 0];
+}
+
 function procesar(raw){
   if(!raw.length){ toast('⚠️ El Excel está vacío'); return; }
   const norm = s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[_\s\.]/g,'');
@@ -384,6 +405,7 @@ function procesar(raw){
     const p1 = f(['tel1','telefono1','celular1','telefono','tel','phone','celular','movil','whatsapp','contacto']);
     const cvk = f(['cupovencida','cupodisponible','montodisponible','cupo','disponible','saldodisponible','montoasacar']);
     const uck = f(['ultimacompra','fechaultimacompra','ultcompra','fechacompra','ultimavisita','ultimacompraen']);
+    const uckr = f(['ultimocredito','fechaultimocredito','ultcredito','fechacredito','ultimasaca','fechasacacredito','ultimoretiro']);
     let cupoVencida = 0;
     const cvRaw = row[cvk];
     if(typeof cvRaw === 'number'){
@@ -402,24 +424,8 @@ function procesar(raw){
       cupoVencida = isNaN(n) ? 0 : n;
     }
     const tel1 = limpiarTel(row[p1]);
-    // última compra: puede venir como Date (cellDates:true) o texto
-    let ultimaCompra = '';
-    let ultimaCompraTs = 0;
-    const ucRaw = row[uck];
-    if(ucRaw instanceof Date && !isNaN(ucRaw)){
-      ultimaCompra = ucRaw.toLocaleDateString('es-AR');
-      ultimaCompraTs = ucRaw.getTime();
-    } else if(ucRaw){
-      ultimaCompra = String(ucRaw).trim();
-      // intentar parsear DD/MM/AAAA o DD-MM-AAAA para poder ordenar
-      const m = ultimaCompra.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-      if(m){
-        let [, d, mo, y] = m;
-        if(y.length===2) y = '20'+y;
-        const dt = new Date(+y, +mo-1, +d);
-        if(!isNaN(dt)) ultimaCompraTs = dt.getTime();
-      }
-    }
+    const [ultimaCompra, ultimaCompraTs] = parsearFechaExcel(row[uck]);
+    const [ultimoCredito, ultimoCreditoTs] = parsearFechaExcel(row[uckr]);
     return {
       id: i,
       n: i+1,
@@ -430,6 +436,8 @@ function procesar(raw){
       cupoVencida: isNaN(cupoVencida) ? 0 : cupoVencida,
       ultimaCompra: ultimaCompra,
       ultimaCompraTs: ultimaCompraTs,
+      ultimoCredito: ultimoCredito,
+      ultimoCreditoTs: ultimoCreditoTs,
       estado: 'pendiente',
       resLlamada: '',
       resWa: '',
@@ -556,22 +564,20 @@ function visibles(){
   });
 
   const orden = document.getElementById('ordenSel')?.value || '';
-  if(orden==='antigua'){
-    // los que hace más tiempo que no compran primero (sin fecha al final)
+  const ordenarPor = (campoTs, ascendente) => {
     lista.sort((a,b)=>{
-      if(!a.ultimaCompraTs && !b.ultimaCompraTs) return 0;
-      if(!a.ultimaCompraTs) return 1;
-      if(!b.ultimaCompraTs) return -1;
-      return a.ultimaCompraTs - b.ultimaCompraTs;
+      const av = a[campoTs], bv = b[campoTs];
+      if(!av && !bv) return 0;
+      if(!av) return 1;   // sin fecha va al final
+      if(!bv) return -1;
+      return ascendente ? av - bv : bv - av;
     });
-  } else if(orden==='reciente'){
-    lista.sort((a,b)=>{
-      if(!a.ultimaCompraTs && !b.ultimaCompraTs) return 0;
-      if(!a.ultimaCompraTs) return 1;
-      if(!b.ultimaCompraTs) return -1;
-      return b.ultimaCompraTs - a.ultimaCompraTs;
-    });
-  }
+  };
+  if(orden==='compra_antigua')        ordenarPor('ultimaCompraTs', true);
+  else if(orden==='compra_reciente')  ordenarPor('ultimaCompraTs', false);
+  else if(orden==='credito_antigua')  ordenarPor('ultimoCreditoTs', true);
+  else if(orden==='credito_reciente') ordenarPor('ultimoCreditoTs', false);
+
   return lista;
 }
 
@@ -592,7 +598,7 @@ function poblarComercios(){
   // mostrar el selector de orden solo si el Excel trae fechas de última compra
   const ordenWrap = document.getElementById('ordenWrap');
   if(ordenWrap){
-    const hayFechas = clients.some(c=>c.ultimaCompraTs);
+    const hayFechas = clients.some(c=>c.ultimaCompraTs || c.ultimoCreditoTs);
     ordenWrap.style.display = hayFechas ? 'flex' : 'none';
   }
 }
@@ -634,6 +640,7 @@ function render(){
       </div>
       <div class="card-sub">${c.dni?`DNI <b>${c.dni}</b>`:''}${c.dni&&c.comercio?' · ':''}${c.comercio?`<b>${c.comercio}</b>`:''}</div>
       ${c.ultimaCompra ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.4rem;">🛒 Última compra: <b style="color:var(--text);">${c.ultimaCompra}</b></div>` : ''}
+      ${c.ultimoCredito ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.4rem;">💳 Último crédito: <b style="color:var(--text);">${c.ultimoCredito}</b></div>` : ''}
       ${c.cupoVencida ? `<div style="display:inline-block;font-size:.78rem;font-weight:800;color:var(--green);background:rgba(46,213,115,.12);border:1px solid rgba(46,213,115,.35);padding:.25rem .6rem;border-radius:8px;margin-bottom:.55rem;">💰 Cupo a sacar: $${c.cupoVencida.toLocaleString('es-AR')}</div>` : ''}
       ${pills.length?`<div class="pill-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem;">${pills.join('')}</div>`:''}
 
@@ -1043,13 +1050,14 @@ function exportar(){
     'Teléfono': c.tels[0]||'',
     'Cupo disponible': c.cupoVencida ? c.cupoVencida.toLocaleString('es-AR') : '',
     'Última compra': c.ultimaCompra || '',
+    'Último crédito': c.ultimoCredito || '',
     'Resultado Llamada': rLbl[c.resLlamada]||c.resLlamada||'⏳ Pendiente',
     'Resultado Mensaje': rLbl[c.resWa]||c.resWa||'⏳ Pendiente',
     'Canal Mensaje': c.resWa?(canalLbl[c.canalMsg]||''):'',
     'Nota': c.nota||''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:28}];
+  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:28}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Llamadas');
   XLSX.writeFile(wb, `llamadas_${new Date().toISOString().slice(0,10)}.xlsx`);
