@@ -150,14 +150,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="search" id="comercioWrap" style="display:none;margin-top:.5rem;">
     🏬 <select id="comercioSel" onchange="render()" style="flex:1;background:none;border:none;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;"></select>
   </div>
-  <!-- Orden por última compra / último crédito -->
+  <!-- Orden por última compra -->
   <div class="search" id="ordenWrap" style="display:none;margin-top:.5rem;">
     📅 <select id="ordenSel" onchange="render()" style="flex:1;background:none;border:none;color:var(--text);font-size:.9rem;outline:none;font-family:'DM Sans',sans-serif;">
       <option value="">Orden: por número (#)</option>
-      <option value="compra_antigua">🛒 Compra: hace más que no vienen</option>
-      <option value="compra_reciente">🛒 Compra: más recientes primero</option>
-      <option value="credito_antigua">💳 Crédito: hace más que no sacan</option>
-      <option value="credito_reciente">💳 Crédito: más recientes primero</option>
+      <option value="compra_menor">🛒 Última compra: de menor a mayor</option>
+      <option value="compra_mayor">🛒 Última compra: de mayor a menor</option>
     </select>
   </div>
   <div class="search" id="searchWrap" style="display:none;">
@@ -405,7 +403,6 @@ function procesar(raw){
     const p1 = f(['tel1','telefono1','celular1','telefono','tel','phone','celular','movil','whatsapp','contacto']);
     const cvk = f(['cupovencida','cupodisponible','montodisponible','cupo','disponible','saldodisponible','montoasacar']);
     const uck = f(['ultimacompra','fechaultimacompra','ultcompra','fechacompra','ultimavisita','ultimacompraen']);
-    const uckr = f(['ultimocredito','fechaultimocredito','ultcredito','fechacredito','ultimasaca','fechasacacredito','ultimoretiro']);
     let cupoVencida = 0;
     const cvRaw = row[cvk];
     if(typeof cvRaw === 'number'){
@@ -425,7 +422,6 @@ function procesar(raw){
     }
     const tel1 = limpiarTel(row[p1]);
     const [ultimaCompra, ultimaCompraTs] = parsearFechaExcel(row[uck]);
-    const [ultimoCredito, ultimoCreditoTs] = parsearFechaExcel(row[uckr]);
     return {
       id: i,
       n: i+1,
@@ -436,8 +432,7 @@ function procesar(raw){
       cupoVencida: isNaN(cupoVencida) ? 0 : cupoVencida,
       ultimaCompra: ultimaCompra,
       ultimaCompraTs: ultimaCompraTs,
-      ultimoCredito: ultimoCredito,
-      ultimoCreditoTs: ultimoCreditoTs,
+      marcado: false,
       estado: 'pendiente',
       resLlamada: '',
       resWa: '',
@@ -503,7 +498,8 @@ function procesar(raw){
       c.canalMsg   = viejo.canalMsg || '';
       c.nota       = viejo.nota || '';
       c.oculto     = viejo.oculto || false;
-      c.tocado     = !!(c.resLlamada || c.resWa);
+      c.marcado    = viejo.marcado || false;
+      c.tocado     = !!(c.resLlamada || c.resWa || c.marcado);
       // si el nuevo Excel no trae teléfono pero ya se había cargado a mano, mantenerlo
       if((!c.tels || !c.tels[0]) && viejo.tels && viejo.tels[0]) c.tels = viejo.tels;
       if(c.resLlamada || c.resWa || c.nota) conservados++;
@@ -573,10 +569,8 @@ function visibles(){
       return ascendente ? av - bv : bv - av;
     });
   };
-  if(orden==='compra_antigua')        ordenarPor('ultimaCompraTs', true);
-  else if(orden==='compra_reciente')  ordenarPor('ultimaCompraTs', false);
-  else if(orden==='credito_antigua')  ordenarPor('ultimoCreditoTs', true);
-  else if(orden==='credito_reciente') ordenarPor('ultimoCreditoTs', false);
+  if(orden==='compra_menor')      ordenarPor('ultimaCompraTs', true);
+  else if(orden==='compra_mayor') ordenarPor('ultimaCompraTs', false);
 
   return lista;
 }
@@ -598,7 +592,7 @@ function poblarComercios(){
   // mostrar el selector de orden solo si el Excel trae fechas de última compra
   const ordenWrap = document.getElementById('ordenWrap');
   if(ordenWrap){
-    const hayFechas = clients.some(c=>c.ultimaCompraTs || c.ultimoCreditoTs);
+    const hayFechas = clients.some(c=>c.ultimaCompraTs);
     ordenWrap.style.display = hayFechas ? 'flex' : 'none';
   }
 }
@@ -626,21 +620,22 @@ function render(){
   data.forEach((c, idx)=>{
     const num = c.n || (idx + 1);
     const tel1 = c.tels[0]||'';
-    const done = !!(c.resLlamada||c.resWa);
+    const done = !!(c.resLlamada||c.resWa||c.marcado);
 
     // resumen de estado para mostrar arriba
     const pills = [];
     if(c.resLlamada) pills.push(`<span style="font-size:.72rem;font-weight:700;color:var(--call);background:rgba(56,182,255,.12);padding:.15rem .5rem;border-radius:7px;">📞 ${rLbl[c.resLlamada]||c.resLlamada}</span>`);
     if(c.resWa)      pills.push(`<span style="font-size:.72rem;font-weight:700;color:var(--green);background:rgba(46,213,115,.1);padding:.15rem .5rem;border-radius:7px;">💬 ${rLbl[c.resWa]||c.resWa}</span>`);
+    if(c.marcado && !c.resLlamada && !c.resWa) pills.push(`<span style="font-size:.72rem;font-weight:700;color:var(--green);background:rgba(46,213,115,.1);padding:.15rem .5rem;border-radius:7px;">✓ Marcado</span>`);
 
     html += `<div class="card ${done?'done':''}" id="card-${c.id}">
       <div class="card-head">
-        <div class="card-name">${c.nombre}</div>
+        <button onclick="toggleMarcado(${c.id})" title="Marcar como ya contactado" style="flex-shrink:0;width:28px;height:28px;border-radius:8px;border:2px solid ${c.marcado?'var(--green)':'var(--border)'};background:${c.marcado?'var(--green)':'transparent'};color:${c.marcado?'#022':'transparent'};font-weight:900;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">✓</button>
+        <div class="card-name" style="flex:1;">${c.nombre}</div>
         <span class="card-num">#${num}</span>
       </div>
       <div class="card-sub">${c.dni?`DNI <b>${c.dni}</b>`:''}${c.dni&&c.comercio?' · ':''}${c.comercio?`<b>${c.comercio}</b>`:''}</div>
       ${c.ultimaCompra ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.4rem;">🛒 Última compra: <b style="color:var(--text);">${c.ultimaCompra}</b></div>` : ''}
-      ${c.ultimoCredito ? `<div style="font-size:.76rem;color:var(--muted);margin-bottom:.4rem;">💳 Último crédito: <b style="color:var(--text);">${c.ultimoCredito}</b></div>` : ''}
       ${c.cupoVencida ? `<div style="display:inline-block;font-size:.78rem;font-weight:800;color:var(--green);background:rgba(46,213,115,.12);border:1px solid rgba(46,213,115,.35);padding:.25rem .6rem;border-radius:8px;margin-bottom:.55rem;">💰 Cupo a sacar: $${c.cupoVencida.toLocaleString('es-AR')}</div>` : ''}
       ${pills.length?`<div class="pill-row" style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem;">${pills.join('')}</div>`:''}
 
@@ -798,6 +793,36 @@ function setRes(id, campo, val){
     if(pillDiv) pillDiv.innerHTML = pills.join('');
     card.classList.toggle('done', !!(c.resLlamada||c.resWa));
   }
+}
+
+// Tilde manual: marca al cliente como "ya contactado" y lo saca de Pendientes,
+// sin necesidad de elegir un resultado específico.
+function toggleMarcado(id){
+  const c = clients.find(x=>x.id===id); if(!c) return;
+  c.marcado = !c.marcado;
+  c.tocado = !!(c.resLlamada || c.resWa || c.marcado);
+  guardar();
+  actualizarProgreso();
+
+  if(filter==='pendiente' && c.marcado){
+    const card = document.getElementById(`card-${id}`);
+    if(card){
+      card.style.transition = 'opacity .3s, max-height .35s, margin .35s, padding .35s';
+      card.style.maxHeight = card.offsetHeight+'px';
+      requestAnimationFrame(()=>{
+        card.style.opacity='0'; card.style.maxHeight='0';
+        card.style.marginBottom='0'; card.style.paddingTop='0'; card.style.paddingBottom='0';
+      });
+      setTimeout(()=>{
+        card.remove();
+        if(!document.querySelector('#list .card')){
+          document.getElementById('list').innerHTML='<div class="empty"><div class="ic">🎉</div><p>¡No quedan pendientes!</p></div>';
+        }
+      }, 360);
+    }
+    return;
+  }
+  render();
 }
 
 function setNota(id, val){
@@ -1050,14 +1075,14 @@ function exportar(){
     'Teléfono': c.tels[0]||'',
     'Cupo disponible': c.cupoVencida ? c.cupoVencida.toLocaleString('es-AR') : '',
     'Última compra': c.ultimaCompra || '',
-    'Último crédito': c.ultimoCredito || '',
     'Resultado Llamada': rLbl[c.resLlamada]||c.resLlamada||'⏳ Pendiente',
     'Resultado Mensaje': rLbl[c.resWa]||c.resWa||'⏳ Pendiente',
     'Canal Mensaje': c.resWa?(canalLbl[c.canalMsg]||''):'',
+    'Marcado': c.marcado ? '✓' : '',
     'Nota': c.nota||''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:28}];
+  ws['!cols'] = [{wch:5},{wch:26},{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:18},{wch:18},{wch:14},{wch:9},{wch:28}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Llamadas');
   XLSX.writeFile(wb, `llamadas_${new Date().toISOString().slice(0,10)}.xlsx`);
